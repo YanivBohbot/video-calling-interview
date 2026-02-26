@@ -10,8 +10,20 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.60.0",
+    "@monaco-editor/react": "^4.7.0",
+    "@stream-io/video-react-sdk": "^1.32.4",
+    "@tailwindcss/vite": "^4.2.1",
+    "axios": "^1.13.5",
+    "framer-motion": "^12.34.3",
+    "lucide-react": "^0.575.0",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.13.1",
+    "socket.io-client": "^4.8.3",
+    "tailwindcss": "^4.2.1",
+    "talent-iq": "file:..",
+    "tldraw": "^4.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
