@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 
 const InterviewSchema = new mongoose.Schema({
   interviewerId: {
-    type: String, // Clerk ID of the interviewer
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
     required: true,
   },
   candidateName: {

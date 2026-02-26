@@ -5,6 +5,7 @@ import { connectDB } from "./lib/db.js";
 import cors from "cors";
 import interviewRoutes from "./routes/interview.routes.js";
 import streamRoutes from "./routes/stream.routes.js";
+import userRoutes from "./routes/user.routes.js";
 
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -54,6 +55,7 @@ app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
 // Routes
 app.use("/api/interviews", interviewRoutes);
 app.use("/api/stream", streamRoutes);
+app.use("/api/users", userRoutes);
 
 console.log(process.env.PORT);
 
