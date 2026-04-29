@@ -276,7 +276,7 @@ External:
 ---
 
 ## Installation
-```
+```bash
 git clone https://github.com/YanivBohbot/video-calling-interview.git
 cd video-calling-interview
 cd backend
