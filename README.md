@@ -1,6 +1,6 @@
-# TalentIQ – Real-Time Technical Interview Platform
+#  Real-Time Technical Interview Platform
 
-TalentIQ is a full-stack real-time technical interview platform that helps recruiters, interviewers, and engineering teams schedule, manage, and conduct remote technical interviews.
+ full-stack real-time technical interview platform that helps recruiters, interviewers, and engineering teams schedule, manage, and conduct remote technical interviews.
 
 The platform combines **live video calls**, **collaborative coding**, **code execution**, **interview scheduling**, and a **system-design whiteboard** into one modern interview workspace.
 
