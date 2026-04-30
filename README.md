@@ -6,6 +6,24 @@ The platform combines **live video calls**, **collaborative coding**, **code exe
 
 ---
 
+## Installation
+``` bash
+git clone https://github.com/YanivBohbot/video-calling-interview.git
+cd video-calling-interview
+cd backend
+npm install
+cd frontend
+npm install
+cd backend
+npm run dev
+cd frontend
+npm run dev
+```
+
+
+
+
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -275,19 +293,6 @@ External:
 
 
 
-## Installation
-```bash
-git clone https://github.com/YanivBohbot/video-calling-interview.git
-cd video-calling-interview
-cd backend
-npm install
-cd frontend
-npm install
-cd backend
-npm run dev
-cd frontend
-npm run dev
-```
 
 
 
