@@ -17,4 +17,10 @@ body {
   @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl;
 }
 
+.field-input {
+  @apply w-full px-4 py-3 rounded-xl border border-slate-200
+    focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand
+    transition-all disabled:opacity-50 disabled:bg-slate-50 disabled:cursor-default;
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
