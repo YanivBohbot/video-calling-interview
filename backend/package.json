@@ -4,6 +4,11 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
+    "seed": "node src/lib/seed.js",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate"
+  },
+  "prisma": {
     "seed": "node src/lib/seed.js"
   },
   "type": "module",
@@ -12,16 +17,17 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "@stream-io/node-sdk": "^0.7.42",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "inngest": "^3.44.3",
-    "mongoose": "^8.19.1",
     "socket.io": "^4.8.3",
     "talent-iq": "file:.."
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "prisma": "^6.19.3"
   }
 }
