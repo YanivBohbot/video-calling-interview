@@ -3,10 +3,12 @@ import controller from "../controllers/controller.js";
 
 const router = express.Router();
 
-// List users (no auth for now)
 router.get("/", controller.getUsers);
-
-// Create user (minimal)
 router.post("/", controller.createUser);
+
+// Profile endpoints — must come before /:id to avoid route shadowing
+router.get("/by-clerk/:clerkId", controller.getUserByClerkId);
+router.put("/by-clerk/:clerkId", controller.updateUser);
+router.get("/by-clerk/:clerkId/stats", controller.getUserStats);
 
 export default router;

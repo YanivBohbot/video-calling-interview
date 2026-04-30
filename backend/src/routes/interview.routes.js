@@ -3,6 +3,10 @@ import controller from "../controllers/controller.js";
 
 const router = express.Router();
 
+// Aggregate routes — must be declared before /:id to avoid shadowing
+router.get("/stats", controller.getInterviewStats);
+router.get("/activity", controller.getRecentActivity);
+
 // List interviews (optionally filtered by x-clerk-id header or ?interviewerId=)
 router.get("/", controller.listInterviews);
 
