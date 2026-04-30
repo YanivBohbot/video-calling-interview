@@ -1,310 +1,300 @@
-#  Real-Time Technical Interview Platform
+# TalentIQ — Interview Platform
 
- full-stack real-time technical interview platform that helps recruiters, interviewers, and engineering teams schedule, manage, and conduct remote technical interviews.
-
-The platform combines **live video calls**, **collaborative coding**, **code execution**, **interview scheduling**, and a **system-design whiteboard** into one modern interview workspace.
+A full-stack platform for conducting technical interviews with real-time video, collaborative code editing, and whiteboard capabilities.
 
 ---
 
-## Installation
-``` bash
-git clone https://github.com/YanivBohbot/video-calling-interview.git
-cd video-calling-interview
-cd backend
-npm install
-cd frontend
-npm install
-cd backend
-npm run dev
-cd frontend
-npm run dev
-```
+## Features
 
-
-
-
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Why This Project](#why-this-project)
-- [Main Features](#main-features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Project Flow](#project-flow)
-- [Real-Time Collaboration Flow](#real-time-collaboration-flow)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Environment Variables](#environment-variables)
-- [Installation](#installation)
-- [Running the Project Locally](#running-the-project-locally)
-- [Backend API Endpoints](#backend-api-endpoints)
-- [Socket.IO Events](#socketio-events)
-- [Interview Data Model](#interview-data-model)
-- [How to Use the Application](#how-to-use-the-application)
-- [Troubleshooting](#troubleshooting)
-- [Future Improvements](#future-improvements)
-- [Resume Summary](#resume-summary)
-- [Author](#author)
+- **Dashboard** — overview of all interviews, stats, and recent activity
+- **Schedule interviews** — create and manage candidate sessions
+- **Live interview room** — video call (Stream.io), collaborative Monaco code editor, and tldraw whiteboard
+- **Coding problems** — built-in library of sessions with difficulty levels
+- **User profiles** — interviewer accounts synced with Clerk authentication
+- **Real-time sync** — Socket.io for collaborative editing state
 
 ---
 
-## Overview
+## Try It Without an Account
 
-TalentIQ is designed to simulate a real-world remote technical interview environment.
-
-Instead of using separate tools for video calls, coding exercises, scheduling, and system-design discussions, TalentIQ brings everything into a single application.
-
-Users can:
-
-- Sign in or continue in guest mode
-- View a dashboard of scheduled interviews
-- Create a new interview session
-- Join a live interview room
-- Use video communication during the interview
-- Collaborate on code in real time
-- Run code and view execution output
-- Use a whiteboard for system-design discussions
-
----
-
-## Why This Project
-
-Technical interviews usually require multiple disconnected tools:
-
-- Zoom or Google Meet for video
-- Google Calendar for scheduling
-- CodeSandbox or CoderPad for coding
-- Excalidraw or Miro for system design
-- Notes or spreadsheets for interview tracking
-
-TalentIQ combines these workflows into one full-stack platform.
-
-This project demonstrates practical experience with:
-
-- Full-stack application development
-- Real-time systems
-- WebSockets
-- Authentication
-- Video SDK integration
-- Collaborative editing
-- Code execution workflows
-- MongoDB persistence
-- Modern SaaS dashboard design
-
----
-
-## Main Features
-
-### Authentication
-
-The application uses Clerk for authentication and protected routes.
-
-Users can:
-
-- Sign in
-- Access protected dashboard pages
-- Continue in guest/demo mode
-
----
-
-### Interview Scheduling
-
-Users can schedule a new interview by entering:
-
-- Candidate name
-- Candidate email
-- Role
-- Interview date
-- Interview time
-
-The interview is saved in MongoDB and displayed in the dashboard.
-
----
-
-### Interview Dashboard
-
-The dashboard allows users to view and manage interview sessions.
-
-It includes:
-
-- Upcoming interviews
-- Interview cards
-- Candidate details
-- Role information
-- Scheduled date and time
-- Quick access to interview rooms
-
----
-
-### Live Video Interview Room
-
-Each interview has a dedicated room.
-
-The interview room includes:
-
-- Live video call
-- Participant connection
-- Video controls
-- Interview workspace layout
-- Real-time coding area
-- Whiteboard area
-
-Video functionality is powered by Stream Video SDK.
-
----
-
-### Collaborative Code Editor
-
-The project includes a collaborative coding editor using Monaco Editor and Socket.IO.
-
-The editor supports:
-
-- Real-time code synchronization
-- Shared language selection
-- Shared execution output
-- Multi-user interview rooms
-- Multiple programming languages
-
-Supported languages include:
-
-- JavaScript
-- TypeScript
-- Python
-- Java
-- C++
-
----
-
-### Code Execution
-
-Users can run code directly from the editor.
-
-The code execution flow:
-
-1. User writes code in the editor
-2. User selects a programming language
-3. User clicks run
-4. Code is sent to the execution API
-5. Output is displayed in the interview room
-6. Output can be synchronized with other participants
-
----
-
-### System Design Whiteboard
-
-The platform includes a whiteboard for system-design interviews.
-
-The whiteboard can be used to:
-
-- Draw architecture diagrams
-- Explain distributed systems
-- Design APIs
-- Sketch database schemas
-- Discuss system flows
-
-The whiteboard is powered by tldraw.
+You don't need to create an account to explore the platform.
+On the sign-in page, scroll to the bottom and click **Guest Mode (Demo Mode)** to enter the app instantly with a demo user.
 
 ---
 
 ## Tech Stack
 
-## Frontend
-
-- React
-- TypeScript
-- Vite
-- React Router
-- Clerk Authentication
-- Stream Video SDK
-- Monaco Editor
-- Socket.IO Client
-- tldraw
-- Tailwind CSS
-- Framer Motion
-- Lucide React
-- Axios
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS |
+| Routing | React Router v7 |
+| Auth | Clerk |
+| Video | Stream.io Video React SDK |
+| Code editor | Monaco Editor |
+| Whiteboard | tldraw |
+| Real-time | Socket.io |
+| Backend | Express.js 5 (ESM) |
+| Database | PostgreSQL 16 (Docker) |
+| ORM | Prisma 6 |
+| Job queue | Inngest |
 
 ---
 
-## Backend
+## Prerequisites
 
-- Node.js
-- Express.js
-- MongoDB
-- Mongoose
-- Socket.IO
-- Stream Node SDK
-- CORS
-- dotenv
-- Nodemon
+- [Node.js](https://nodejs.org/) 18+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Clerk](https://clerk.com/) account (for auth)
+- [Stream.io](https://getstream.io/) account (for video)
 
 ---
 
-## External Services
+## Getting Started
 
-- Clerk for authentication
-- Stream for video calls
-- MongoDB for database persistence
-- Piston API for code execution
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/YanivBohbot/video-calling-interview.git
+cd video-calling-interview
+```
+
+### 2. Start the database
+
+```bash
+docker compose up -d
+```
+
+This starts a PostgreSQL 16 container on port **5436** with a persistent named volume (`postgres_data`).
+
+### 3. Configure environment variables
+
+**Backend** — create `backend/.env`:
+
+```env
+PORT=3000
+DATABASE_URL=postgresql://talentiq:talentiq_secret@127.0.0.1:5436/talentiq
+
+STREAM_API_KEY=your_stream_api_key
+STREAM_API_SECRET=your_stream_api_secret
+
+CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+CLERK_SECRET_KEY=your_clerk_secret_key
+
+INGEST_API_KEY=your_inngest_api_key
+
+CLIENT_URL=http://localhost:5173
+```
+
+**Frontend** — create `frontend/.env`:
+
+```env
+VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+VITE_STREAM_API_KEY=your_stream_api_key
+```
+
+### 4. Install dependencies
+
+```bash
+# Backend
+cd backend
+npm install
+
+# Frontend
+cd ../frontend
+npm install
+```
+
+### 5. Run database migrations
+
+```bash
+cd backend
+npx prisma migrate dev --name init
+npx prisma generate
+```
+
+### 6. Seed the database (optional)
+
+```bash
+cd backend
+npm run seed
+```
+
+This creates 3 demo users, 3 coding sessions, and 3 sample interviews.
+
+### 7. Start the servers
+
+Open two terminals:
+
+```bash
+# Terminal 1 — Backend (http://localhost:3000)
+cd backend
+npm run dev
+
+# Terminal 2 — Frontend (http://localhost:5173)
+cd frontend
+npm run dev
+```
 
 ---
 
-## Architecture High-Level Architecture Diagram
+## Project Structure
 
-The application follows a full-stack client-server architecture.
+```
+Interview Platform/
+├── docker-compose.yml          # PostgreSQL Docker service
+├── backend/
+│   ├── prisma/
+│   │   └── schema.prisma       # Database schema (User, Interview, Session)
+│   └── src/
+│       ├── server.js           # Express + Socket.io entry point
+│       ├── controllers/
+│       │   └── controller.js   # All route handlers
+│       ├── routes/
+│       │   ├── user.routes.js
+│       │   ├── interview.routes.js
+│       │   ├── session.routes.js
+│       │   └── stream.routes.js
+│       ├── middlewares/
+│       │   └── protectRoute.js # Auth middleware (Clerk header)
+│       └── lib/
+│           ├── db.js           # Prisma client singleton
+│           └── seed.js         # Database seeder
+└── frontend/
+    └── src/
+        ├── App.tsx             # Routes
+        ├── pages/
+        │   ├── Dashboard.tsx
+        │   ├── Interviews.tsx
+        │   ├── NewInterview.tsx
+        │   ├── Schedule.tsx
+        │   ├── InterviewRoom.tsx
+        │   └── Profile.tsx
+        ├── components/
+        │   ├── CollaborativeEditor.tsx
+        │   └── Whiteboard.tsx
+        └── layouts/
+            └── DashboardLayout.tsx
+```
 
-```text
+---
 
-+-----------------------------+
-|        React Frontend       |
-|-----------------------------|
-| Dashboard                   |
-| Interview Scheduling        |
-| Interview Room              |
-| Monaco Code Editor          |
-| tldraw Whiteboard           |
-| Stream Video UI             |
-+-------------+---------------+
-              |
-              | REST API + Socket.IO
-              |
-+-------------v---------------+
-|      Node.js Express API     |
-|-----------------------------|
-| Interview Routes            |
-| Stream Token Routes         |
-| Socket.IO Server            |
-| Real-Time Events            |
-+-------------+---------------+
-              |
-              | Mongoose
-              |
-+-------------v---------------+
-|          MongoDB             |
-|-----------------------------|
-| Interviews Collection       |
-+-----------------------------+
+## API Reference
 
-External:
-- Clerk Authentication
-- Stream Video SDK
-- Piston Code Execution API
+Base URL: `http://localhost:3000/api`
 
+### Users
 
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/users` | List all users |
+| `POST` | `/users` | Create a user |
+| `GET` | `/users/by-clerk/:clerkId` | Get user by Clerk ID |
+| `PUT` | `/users/by-clerk/:clerkId` | Update user profile |
+| `GET` | `/users/by-clerk/:clerkId/stats` | Get interview stats for user |
 
+### Interviews
 
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/interviews` | List interviews (filter by `x-clerk-id` header) |
+| `POST` | `/interviews` | Create an interview |
+| `GET` | `/interviews/:id` | Get single interview |
+| `PATCH` | `/interviews/:id/status` | Update status (`scheduled`, `live`, `completed`, `cancelled`) |
+| `DELETE` | `/interviews/:id` | Delete an interview |
+| `GET` | `/interviews/stats` | Platform-wide statistics |
+| `GET` | `/interviews/activity` | Recent activity feed |
 
+### Sessions
 
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/sessions` | List coding problem sessions |
+| `GET` | `/sessions/:id` | Get a single session |
 
+### Stream
 
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/stream/token?userId=<clerkId>` | Get a Stream.io user token for video |
 
+---
 
+## Database Schema
 
+```
+User
+ ├── id           (CUID, primary key)
+ ├── clerkId      (unique — links to Clerk auth)
+ ├── name, email
+ ├── profileImage, title, bio, phone, timezone
+ └── interviews → Interview[]
 
+Interview
+ ├── id           (CUID, primary key)
+ ├── interviewerId → User
+ ├── candidateName, candidateEmail, role
+ ├── scheduledAt  (DateTime)
+ ├── status       (scheduled | live | completed | cancelled)
+ ├── duration     (minutes, default 60)
+ ├── interviewType (technical | behavioral | system-design | coding-challenge)
+ └── notes
 
+Session (coding problems)
+ ├── id           (CUID, primary key)
+ ├── problem, solution
+ ├── difficulty   (Easy | Medium | Hard)
+ └── category
+```
 
+---
 
+## Authentication
 
+The platform uses [Clerk](https://clerk.com/) for user identity. The frontend passes the user's Clerk ID as an `x-clerk-id` header on protected requests. The `protectRoute` middleware validates this against the database.
 
+For local/demo development without Clerk, requests can use:
+```
+Authorization: Bearer user:<clerkId>
+```
 
+---
+
+## Useful Commands
+
+```bash
+# View database tables in Docker
+docker exec -it <container-name> psql -U talentiq -d talentiq
+
+# Inside psql
+SELECT * FROM users;
+SELECT * FROM interviews;
+SELECT * FROM sessions;
+\q   -- quit
+
+# Re-run migrations after schema changes
+cd backend && npx prisma migrate dev
+
+# Open Prisma Studio (visual DB browser)
+cd backend && npx prisma studio
+
+# Reset database (wipes all data)
+cd backend && npx prisma migrate reset
+```
+
+---
+
+## Docker
+
+The `docker-compose.yml` at the project root defines a single PostgreSQL service:
+
+- **Image:** postgres:16-alpine
+- **Host port:** 5436 → container port 5432
+- **Credentials:** `talentiq` / `talentiq_secret`
+- **Database:** `talentiq`
+- **Persistence:** named volume `postgres_data` (survives container restarts)
+
+```bash
+docker compose up -d      # start in background
+docker compose down       # stop (data is kept)
+docker compose down -v    # stop AND delete all data
+```
