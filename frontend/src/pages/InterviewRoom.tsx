@@ -9,13 +9,19 @@ import {
 } from '@stream-io/video-react-sdk';
 import { useUser } from '@clerk/clerk-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, Code, PenTool, FileText, Loader2, Save } from 'lucide-react';
+import { Video, Code, PenTool, FileText, Loader2, Save, Sparkles } from 'lucide-react';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 
 const apiKey = import.meta.env.VITE_STREAM_API_KEY;
 
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import Whiteboard from '../components/Whiteboard';
+
+type Question = {
+  text: string;
+  category: 'technical' | 'behavioral' | 'system-design';
+  difficulty: 'easy' | 'medium' | 'hard';
+};
 
 const ReportModal: React.FC<{
   interviewId: string;
@@ -89,17 +95,159 @@ const ReportModal: React.FC<{
   );
 };
 
+const API = 'http://localhost:3001/api';
+
+const QuestionsPanel: React.FC<{
+  interviewId: string;
+  clerkId: string;
+  initialQuestions?: Question[] | null;
+}> = ({ interviewId, clerkId, initialQuestions }) => {
+  const [questions, setQuestions] = React.useState<Question[]>(initialQuestions ?? []);
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const generate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`${API}/interviews/${interviewId}/questions/generate`, {
+        method: 'POST',
+        headers: { 'x-clerk-id': clerkId },
+      });
+      const body = await r.json();
+      if (!r.ok) {
+        setError(
+          r.status === 429
+            ? `Slow down — try again in ${body.retryAfter}s`
+            : body?.message || 'Failed to generate questions',
+        );
+        return;
+      }
+      setQuestions(body.questions);
+    } catch (e: any) {
+      setError(e?.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateRow = (i: number, patch: Partial<Question>) =>
+    setQuestions((qs) => qs.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
+
+  const deleteRow = (i: number) => setQuestions((qs) => qs.filter((_, idx) => idx !== i));
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await fetch(`${API}/interviews/${interviewId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-clerk-id': clerkId },
+        body: JSON.stringify({ questions }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        setError(body?.message || 'Failed to save questions');
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Network error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="h-full overflow-y-auto bg-slate-900/60 rounded-2xl border border-white/5 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles size={18} className="text-brand" />
+          <h3 className="text-white font-semibold">Interview questions</h3>
+        </div>
+        <button
+          onClick={generate}
+          disabled={loading}
+          className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : null}
+          {questions.length ? 'Regenerate' : 'Generate questions'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 text-red-200 text-sm rounded-lg p-3 mb-3">
+          {error}
+        </div>
+      )}
+
+      {questions.length === 0 && !loading && (
+        <p className="text-slate-400 text-sm">No questions yet — click "Generate questions".</p>
+      )}
+
+      <div className="space-y-3">
+        {questions.map((q, i) => (
+          <div key={i} className="bg-slate-800/60 border border-white/5 rounded-xl p-3 flex flex-col gap-2">
+            <textarea
+              value={q.text}
+              onChange={(e) => updateRow(i, { text: e.target.value })}
+              rows={2}
+              className="w-full bg-transparent text-slate-100 text-sm resize-none focus:outline-none"
+            />
+            <div className="flex items-center gap-2 text-xs">
+              <select
+                value={q.category}
+                onChange={(e) => updateRow(i, { category: e.target.value as Question['category'] })}
+                className="bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-200"
+              >
+                <option value="technical">technical</option>
+                <option value="behavioral">behavioral</option>
+                <option value="system-design">system-design</option>
+              </select>
+              <select
+                value={q.difficulty}
+                onChange={(e) => updateRow(i, { difficulty: e.target.value as Question['difficulty'] })}
+                className="bg-slate-800 border border-white/10 rounded px-2 py-1 text-slate-200"
+              >
+                <option value="easy">easy</option>
+                <option value="medium">medium</option>
+                <option value="hard">hard</option>
+              </select>
+              <button onClick={() => deleteRow(i)} className="ml-auto text-slate-500 hover:text-red-400">
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {questions.length > 0 && (
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Save questions
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const InterviewRoom: React.FC = () => {
   const { id } = useParams();
   const { user } = useUser();
   const navigate = useNavigate();
   const [client, setClient] = React.useState<StreamVideoClient | null>(null);
   const [call, setCall] = React.useState<any>(null);
-  const [activeTab, setActiveTab] = React.useState<'code' | 'design'>('code');
+  const [activeTab, setActiveTab] = React.useState<'code' | 'design' | 'questions'>('code');
   const [showReport, setShowReport] = React.useState(false);
   const [interviewData, setInterviewData] = React.useState<{
     codeSnapshot?: string | null;
     codeLanguage?: string | null;
+    questions?: Question[] | null;
   } | null>(null);
 
   React.useEffect(() => {
@@ -249,6 +397,15 @@ export const InterviewRoom: React.FC = () => {
                     <PenTool size={16} />
                     System Design
                   </button>
+                  <button
+                    onClick={() => setActiveTab('questions')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === 'questions' ? 'bg-brand text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    <Sparkles size={16} />
+                    Questions
+                  </button>
                 </div>
 
                 {/* Active Workspace */}
@@ -259,8 +416,14 @@ export const InterviewRoom: React.FC = () => {
                       initialCode={interviewData?.codeSnapshot ?? undefined}
                       initialLanguage={interviewData?.codeLanguage ?? undefined}
                     />
-                  ) : (
+                  ) : activeTab === 'design' ? (
                     <Whiteboard />
+                  ) : (
+                    <QuestionsPanel
+                      interviewId={id || 'default'}
+                      clerkId={user?.id || 'demo'}
+                      initialQuestions={interviewData?.questions}
+                    />
                   )}
                 </div>
               </div>
