@@ -171,15 +171,33 @@ export const deleteInterview = async (req, res) => {
   }
 };
 
+const ALLOWED_QUESTION_CATEGORY = new Set(["technical", "behavioral", "system-design"]);
+const ALLOWED_QUESTION_DIFFICULTY = new Set(["easy", "medium", "hard"]);
+
+const validateQuestionsPayload = (questions) => {
+  if (!Array.isArray(questions)) return "questions must be an array";
+  for (const q of questions) {
+    if (typeof q?.text !== "string" || !q.text.trim()) return "each question needs non-empty text";
+    if (!ALLOWED_QUESTION_CATEGORY.has(q.category)) return `invalid category: ${q.category}`;
+    if (!ALLOWED_QUESTION_DIFFICULTY.has(q.difficulty)) return `invalid difficulty: ${q.difficulty}`;
+  }
+  return null;
+};
+
 export const updateInterview = async (req, res) => {
   try {
-    const { notes, status } = req.body;
+    const { notes, status, questions } = req.body;
     const data = {};
     if (notes !== undefined) data.notes = notes;
     if (status !== undefined) {
       const allowed = ["scheduled", "live", "completed", "cancelled"];
       if (!allowed.includes(status)) return res.status(400).json({ message: "Invalid status" });
       data.status = status;
+    }
+    if (questions !== undefined) {
+      const err = validateQuestionsPayload(questions);
+      if (err) return res.status(400).json({ message: err });
+      data.questions = questions;
     }
     const updated = await prisma.interview.update({
       where: { id: req.params.id },
