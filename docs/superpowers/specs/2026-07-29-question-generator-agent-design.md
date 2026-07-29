@@ -61,15 +61,14 @@ Exports:
 
 Behavior:
 - Reads `OPENAI_API_KEY`, `AI_MODEL` (default `gpt-4o-mini`), `AI_QUESTION_COUNT` (default `6`) from env — same config surface as the superseded spec.
-- Fetches `getLeetCodeTools()` (may be `[]`) and constructs the agent with `createAgent({ model: "openai:" + AI_MODEL, tools, prompt: SYSTEM_PROMPT })`.
+- Fetches `getLeetCodeTools()` (may be `[]`) and constructs the agent with `createAgent({ model: "openai:" + AI_MODEL, tools, systemPrompt: SYSTEM_PROMPT, responseFormat: QuestionsSchema })`. `QuestionsSchema` is a Zod schema (`{ questions: Array<{ text, category, difficulty }> }` with `z.enum` for `category`/`difficulty`) — using `createAgent`'s native `responseFormat` gets the agent's structured output validated by the framework itself, instead of hand-parsing a "final message must be JSON" instruction (a more fragile pattern the superseded spec used, since it predates confirming `responseFormat` support). Verified against current LangChain.js docs via context7 — `systemPrompt` (not `prompt`, renamed in v1) and `result.structuredResponse` are the current field names.
 - `SYSTEM_PROMPT` (in `backend/src/lib/agents/prompts/questionGenerator.js`, mirroring the superseded spec's separate-prompt-file convention) instructs the agent to:
   - Infer seniority (junior/mid/senior/staff+) and domain (backend/frontend/full-stack/data/mobile/etc.) from the `role` string.
   - Use that inference to bias difficulty and topic choices — junior skews easy, staff+ skews hard; domain steers topic relevance.
   - For interviews where a concrete coding problem would help (typically `technical`), consider calling `search_problems` or `get_problem` to ground one or more questions in a real, well-known problem — entirely the agent's judgment call, not gated by our code on `interviewType`.
   - When referencing a LeetCode-sourced problem, **paraphrase the question text** in its own words (name the problem and topic, describe the task) rather than copying the tool's returned description verbatim (see §9).
-  - Respond with a final message that is a single JSON object: `{ "questions": [ { "text": string, "category": "technical"|"behavioral"|"system-design", "difficulty": "easy"|"medium"|"hard" } ] }`, no prose outside the JSON.
-- Invokes the agent: `await agent.invoke({ messages: [{ role: "user", content: buildUserMessage({ role, interviewType, count }) }] })`.
-- Takes the content of the last message in the response, parses it as JSON, and validates it with the same shape-validation logic as the superseded spec (array length, allowed `category`/`difficulty` enums) — reused/ported, not redesigned.
+- Invokes the agent: `await agent.invoke({ messages: [{ role: "user", content: buildUserMessage({ role, interviewType, count }) }] }, { recursionLimit: 10 })` — the recursion limit bounds the tool-calling loop so a confused agent can't spin forever.
+- Reads `result.structuredResponse.questions`, still runs it through the same shape-validation function as the superseded spec (array length, allowed `category`/`difficulty` enums) as a defense-in-depth check — `responseFormat` validates shape at the framework level, but re-validating our own domain rules (e.g. array non-empty) costs nothing and matches the existing error-handling contract.
 - Throws the same typed errors as the superseded spec's `ai.js` (`AIConfigError`, `AIProviderError`, `AIInvalidResponseError`) so the existing error-to-HTTP-status mapping still applies unchanged.
 
 ### 4.3 Route and controller — unchanged shape from the superseded spec
@@ -100,7 +99,7 @@ Unchanged from the superseded spec's §5: a "Generate questions" button and edit
 | Missing `OPENAI_API_KEY` at call time | 500, `"AI not configured"` |
 | LeetCode MCP tool connection fails | No error surfaced — agent runs with `tools: []`, degrades to pure-LLM generation |
 | Agent's LLM call fails (network, 5xx, timeout) | 502 |
-| Agent's final message isn't valid/parseable JSON or fails schema validation | 502 |
+| Agent's `structuredResponse` fails our domain-rule validation (empty array, disallowed enum value) | 502 |
 | Rate limit exceeded | 429 with `retryAfter` |
 | Saving invalid `questions` payload via PATCH | 400 |
 
@@ -108,7 +107,7 @@ Unchanged from the superseded spec's §5: a "Generate questions" button and edit
 
 **Backend (unit)**
 - `leetcodeMcpClient.js`: mock `MultiServerMCPClient` — happy path returns the filtered allowlist tools; connection-failure path returns `[]` without throwing.
-- `questionGeneratorAgent.js`: mock `createAgent`'s returned agent object's `.invoke()` — happy path returns parsed/validated questions; invalid-JSON-final-message path throws `AIInvalidResponseError`; agent-invoke-rejects path throws `AIProviderError`. Test both with `tools: []` (no LeetCode) and with a mocked non-empty tool list, to confirm the module doesn't behave differently based on tool availability beyond what the agent itself decides.
+- `questionGeneratorAgent.js`: mock `createAgent`'s returned agent object's `.invoke()` — happy path returns `structuredResponse.questions` after passing domain-rule validation; malformed-`structuredResponse` path throws `AIInvalidResponseError`; agent-invoke-rejects path throws `AIProviderError`. Test both with `tools: []` (no LeetCode) and with a mocked non-empty tool list, to confirm the module doesn't behave differently based on tool availability beyond what the agent itself decides.
 
 **Backend (route)** — same shape as the superseded spec's §8: 200/404/502/429 paths on the generate endpoint; 200/400 on the PATCH save path.
 
