@@ -32,28 +32,62 @@ const io = new Server(httpServer, {
 const roomState = new Map();
 const FLUSH_INTERVAL_MS = 10_000;
 
+let isFlushing = false;
+
 setInterval(() => {
-  flushAllDirty(roomState, prisma.interview).catch((err) => {
-    console.error("roomState: periodic flush error:", err.message);
-  });
+  if (isFlushing) return; // a previous pass is still in flight — skip this tick
+  isFlushing = true;
+  flushAllDirty(roomState, prisma.interview)
+    .catch((err) => {
+      console.error("roomState: periodic flush error:", err.message);
+    })
+    .finally(() => {
+      isFlushing = false;
+    });
 }, FLUSH_INTERVAL_MS);
 
 // Socket.io logic
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
-  socket.on("join-room", (roomId) => {
+  socket.on("join-room", async (roomId) => {
     socket.join(roomId);
     socket.data.roomId = roomId;
     console.log(`User ${socket.id} joined room: ${roomId}`);
+
+    // Send the room's current state back to *this* socket only, so a (re)joining
+    // client is seeded from the server rather than from a stale page-load snapshot.
+    const entry = roomState.get(roomId);
+    if (entry) {
+      // Live in-memory state wins — it is newer than anything in Postgres.
+      socket.emit("code-update", entry.code);
+      socket.emit("language-update", entry.language);
+      return;
+    }
+
+    // No live room (fresh room, or a previous participant's flush-on-exit already
+    // wrote and cleared it) — fall back to the persisted snapshot.
+    try {
+      const interview = await prisma.interview.findUnique({
+        where: { id: roomId },
+        select: { codeSnapshot: true, codeLanguage: true },
+      });
+      if (!interview) return; // unknown room (e.g. the demo 'default' id) — leave the client default
+      if (interview.codeSnapshot != null) socket.emit("code-update", interview.codeSnapshot);
+      if (interview.codeLanguage != null) socket.emit("language-update", interview.codeLanguage);
+    } catch (err) {
+      console.error(`roomState: failed to load snapshot for room ${roomId}:`, err.message);
+    }
   });
 
   socket.on("code-change", ({ roomId, code }) => {
+    if (!socket.rooms.has(roomId)) return;
     socket.to(roomId).emit("code-update", code);
     applyCodeChange(roomState, roomId, code);
   });
 
   socket.on("language-change", ({ roomId, language }) => {
+    if (!socket.rooms.has(roomId)) return;
     socket.to(roomId).emit("language-update", language);
     applyLanguageChange(roomState, roomId, language);
   });

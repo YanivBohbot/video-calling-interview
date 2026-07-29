@@ -150,7 +150,10 @@ export const InterviewRoom: React.FC = () => {
     let cancelled = false;
 
     fetch(`http://localhost:3001/api/interviews/${id}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Interview fetch failed: ${r.status} ${r.statusText}`);
+        return r.json();
+      })
       .then((data) => {
         if (!cancelled) setInterviewData(data);
       })
