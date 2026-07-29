@@ -97,6 +97,10 @@ export const InterviewRoom: React.FC = () => {
   const [call, setCall] = React.useState<any>(null);
   const [activeTab, setActiveTab] = React.useState<'code' | 'design'>('code');
   const [showReport, setShowReport] = React.useState(false);
+  const [interviewData, setInterviewData] = React.useState<{
+    codeSnapshot?: string | null;
+    codeLanguage?: string | null;
+  } | null>(null);
 
   React.useEffect(() => {
     if (!id) return;
@@ -140,6 +144,22 @@ export const InterviewRoom: React.FC = () => {
       if (client) client.disconnectUser();
     };
   }, [user, id]);
+
+  React.useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    fetch(`http://localhost:3001/api/interviews/${id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setInterviewData(data);
+      })
+      .catch((err) => console.error('Failed to fetch interview data:', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const handleEndSession = async () => {
     if (call) { await call.leave(); setCall(null); }
@@ -231,7 +251,11 @@ export const InterviewRoom: React.FC = () => {
                 {/* Active Workspace */}
                 <div className="flex-1 rounded-2xl overflow-hidden border border-white/5 shadow-inner">
                   {activeTab === 'code' ? (
-                    <CollaborativeEditor roomId={id || 'default'} />
+                    <CollaborativeEditor
+                      roomId={id || 'default'}
+                      initialCode={interviewData?.codeSnapshot ?? undefined}
+                      initialLanguage={interviewData?.codeLanguage ?? undefined}
+                    />
                   ) : (
                     <Whiteboard />
                   )}
