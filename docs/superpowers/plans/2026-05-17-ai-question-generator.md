@@ -1,5 +1,7 @@
 # AI Question Generator Implementation Plan
 
+> **OBSOLETE:** Superseded by the spec at `docs/superpowers/specs/2026-07-29-question-generator-agent-design.md` (agent with LangChain tool-calling). This plan was never executed. Do not implement from this file — kept as historical record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a "Generate questions" button on the interview detail view that calls OpenAI (`gpt-4o-mini`) to produce 5–8 structured interview questions, lets the interviewer edit them, and persists them on the interview record.

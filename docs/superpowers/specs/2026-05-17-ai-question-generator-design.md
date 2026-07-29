@@ -1,7 +1,7 @@
 # AI Question Generator — Design
 
 **Date:** 2026-05-17
-**Status:** Approved (pending user review of written spec)
+**Status:** OBSOLETE — superseded by `docs/superpowers/specs/2026-07-29-question-generator-agent-design.md` (agent with LangChain tool-calling, replaces this single-shot design). Never implemented. Kept as historical record.
 **Feature:** First of four planned AI features. Subsequent features (summarizer, resume screener, coding-session assistant) will be specced separately.
 
 ## 1. Overview
