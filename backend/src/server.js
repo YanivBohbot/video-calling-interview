@@ -1,8 +1,14 @@
 import express from "express";
 import dotenv from "dotenv";
 import { ENV } from "./lib/env.js";
-import { connectDB } from "./lib/db.js";
+import { connectDB, prisma } from "./lib/db.js";
 import cors from "cors";
+import {
+  applyCodeChange,
+  applyLanguageChange,
+  flushAllDirty,
+  flushRoomOnExit,
+} from "./lib/roomState.js";
 import interviewRoutes from "./routes/interview.routes.js";
 import streamRoutes from "./routes/stream.routes.js";
 import userRoutes from "./routes/user.routes.js";
@@ -23,21 +29,33 @@ const io = new Server(httpServer, {
   },
 });
 
+const roomState = new Map();
+const FLUSH_INTERVAL_MS = 10_000;
+
+setInterval(() => {
+  flushAllDirty(roomState, prisma.interview).catch((err) => {
+    console.error("roomState: periodic flush error:", err.message);
+  });
+}, FLUSH_INTERVAL_MS);
+
 // Socket.io logic
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
+    socket.data.roomId = roomId;
     console.log(`User ${socket.id} joined room: ${roomId}`);
   });
 
   socket.on("code-change", ({ roomId, code }) => {
     socket.to(roomId).emit("code-update", code);
+    applyCodeChange(roomState, roomId, code);
   });
 
   socket.on("language-change", ({ roomId, language }) => {
     socket.to(roomId).emit("language-update", language);
+    applyLanguageChange(roomState, roomId, language);
   });
 
   socket.on("code-execution", ({ roomId, result }) => {
@@ -46,6 +64,15 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
+    const roomId = socket.data.roomId;
+    if (roomId) {
+      const room = io.sockets.adapter.rooms.get(roomId);
+      if (!room || room.size === 0) {
+        flushRoomOnExit(roomState, prisma.interview, roomId).catch((err) => {
+          console.error(`roomState: flush-on-exit error for room ${roomId}:`, err.message);
+        });
+      }
+    }
   });
 });
 
