@@ -149,6 +149,28 @@ export const deleteInterview = async (req, res) => {
   }
 };
 
+export const updateInterview = async (req, res) => {
+  try {
+    const { notes, status } = req.body;
+    const data = {};
+    if (notes !== undefined) data.notes = notes;
+    if (status !== undefined) {
+      const allowed = ["scheduled", "live", "completed", "cancelled"];
+      if (!allowed.includes(status)) return res.status(400).json({ message: "Invalid status" });
+      data.status = status;
+    }
+    const updated = await prisma.interview.update({
+      where: { id: req.params.id },
+      data,
+      include: { interviewer: { select: INTERVIEWER_SELECT } },
+    });
+    return res.status(200).json(toInterviewDoc(updated));
+  } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Interview not found" });
+    return res.status(500).json({ message: "Error updating interview", error: error.message });
+  }
+};
+
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 const USER_SELECT = {
@@ -377,6 +399,7 @@ export default {
   createInterview,
   getInterview,
   updateInterviewStatus,
+  updateInterview,
   deleteInterview,
   createUser,
   getUsers,

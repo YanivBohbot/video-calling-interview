@@ -91,9 +91,9 @@ const Profile: React.FC = () => {
     setLoading(true);
     try {
       const [profileRes, statsRes, ivRes] = await Promise.all([
-        fetch(`http://localhost:3000/api/users/by-clerk/${clerkId}`),
-        fetch(`http://localhost:3000/api/users/by-clerk/${clerkId}/stats`),
-        fetch(`http://localhost:3000/api/interviews?interviewerId=${clerkId}`),
+        fetch(`http://localhost:3001/api/users/by-clerk/${clerkId}`),
+        fetch(`http://localhost:3001/api/users/by-clerk/${clerkId}/stats`),
+        fetch(`http://localhost:3001/api/interviews?interviewerId=${clerkId}`),
       ]);
 
       if (profileRes.ok) {
@@ -121,7 +121,7 @@ const Profile: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:3000/api/users/by-clerk/${clerkId}`, {
+      const res = await fetch(`http://localhost:3001/api/users/by-clerk/${clerkId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, email: clerkEmail }),

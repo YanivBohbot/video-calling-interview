@@ -16,7 +16,7 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId }) => {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:3000');
+    socketRef.current = io('http://localhost:3001');
     socketRef.current.emit('join-room', roomId);
 
     socketRef.current.on('code-update', (newCode: string) => setCode(newCode));

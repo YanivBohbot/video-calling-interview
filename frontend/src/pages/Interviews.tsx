@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Video, Search, Calendar, Clock, Play,
-  Trash2, AlertTriangle, X, Loader2,
+  Trash2, AlertTriangle, X, Loader2, FileText, Save,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -15,6 +15,7 @@ interface Interview {
   status: 'scheduled' | 'live' | 'completed' | 'cancelled';
   interviewType: string;
   duration: number;
+  notes: string;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -82,19 +83,97 @@ const DeleteModal: React.FC<{
   </div>
 );
 
+const ReportModal: React.FC<{
+  interview: Interview;
+  onClose: () => void;
+  onSave: (id: string, notes: string) => Promise<void>;
+  saving: boolean;
+}> = ({ interview, onClose, onSave, saving }) => {
+  const [notes, setNotes] = useState(interview.notes || '');
+  const hasChanges = notes !== (interview.notes || '');
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full"
+      >
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-brand/10 rounded-xl">
+              <FileText size={20} className="text-brand" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Interview Report</h2>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {interview.candidateName} &mdash; {interview.role}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6">
+          {interview.status === 'completed' && !interview.notes && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
+              No report was written at the end of this session.
+            </p>
+          )}
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Write your observations, strengths, areas for improvement, final decision..."
+            rows={10}
+            className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-700 placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand/30 transition-all"
+          />
+          <p className="text-xs text-slate-400 mt-1 text-right">{notes.length} characters</p>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 pt-0 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(interview._id, notes)}
+            disabled={saving || !hasChanges}
+            className="flex-1 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const Interviews: React.FC = () => {
-  const [interviews, setInterviews]       = useState<Interview[]>([]);
-  const [loading, setLoading]             = useState(true);
-  const [searchTerm, setSearchTerm]       = useState('');
-  const [activeFilter, setActiveFilter]   = useState<Filter>('all');
-  const [deletingId, setDeletingId]       = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [interviews, setInterviews]         = useState<Interview[]>([]);
+  const [loading, setLoading]               = useState(true);
+  const [searchTerm, setSearchTerm]         = useState('');
+  const [activeFilter, setActiveFilter]     = useState<Filter>('all');
+  const [deletingId, setDeletingId]         = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading]   = useState(false);
+  const [reportInterview, setReportInterview] = useState<Interview | null>(null);
+  const [reportSaving, setReportSaving]     = useState(false);
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/api/interviews');
+      const res = await fetch('http://localhost:3001/api/interviews');
       const data = await res.json();
       setInterviews(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -110,11 +189,30 @@ const Interviews: React.FC = () => {
     if (!deletingId) return;
     setDeleteLoading(true);
     try {
-      await fetch(`http://localhost:3000/api/interviews/${deletingId}`, { method: 'DELETE' });
+      await fetch(`http://localhost:3001/api/interviews/${deletingId}`, { method: 'DELETE' });
       setInterviews((prev) => prev.filter((iv) => iv._id !== deletingId));
     } finally {
       setDeleteLoading(false);
       setDeletingId(null);
+    }
+  };
+
+  const handleSaveReport = async (id: string, notes: string) => {
+    setReportSaving(true);
+    try {
+      await fetch(`http://localhost:3001/api/interviews/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      });
+      setInterviews((prev) =>
+        prev.map((iv) => (iv._id === id ? { ...iv, notes } : iv))
+      );
+      setReportInterview(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setReportSaving(false);
     }
   };
 
@@ -145,6 +243,15 @@ const Interviews: React.FC = () => {
           onConfirm={handleDelete}
           onCancel={() => setDeletingId(null)}
           loading={deleteLoading}
+        />
+      )}
+
+      {reportInterview && (
+        <ReportModal
+          interview={reportInterview}
+          onClose={() => setReportInterview(null)}
+          onSave={handleSaveReport}
+          saving={reportSaving}
         />
       )}
 
@@ -207,6 +314,7 @@ const Interviews: React.FC = () => {
               const initials = interview.candidateName
                 .split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
               const isActive = interview.status === 'live' || interview.status === 'scheduled';
+              const hasReport = !!interview.notes?.trim();
 
               return (
                 <motion.div
@@ -227,6 +335,20 @@ const Interviews: React.FC = () => {
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${STATUS_COLORS[interview.status]}`}>
                         {interview.status}
                       </span>
+                      {/* Compte rendu button — visible on completed interviews */}
+                      {interview.status === 'completed' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setReportInterview(interview); }}
+                          className={`p-1.5 rounded-lg transition-all ${
+                            hasReport
+                              ? 'text-brand bg-brand/10 hover:bg-brand/20'
+                              : 'text-slate-300 hover:text-brand hover:bg-brand/10 opacity-0 group-hover:opacity-100'
+                          }`}
+                          title={hasReport ? 'View report' : 'Write report'}
+                        >
+                          <FileText size={15} />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); setDeletingId(interview._id); }}
                         className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
@@ -251,6 +373,11 @@ const Interviews: React.FC = () => {
                       <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 flex items-center gap-1">
                         <Clock size={11} />{interview.duration ?? 60}m
                       </span>
+                      {hasReport && (
+                        <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-brand/10 text-brand flex items-center gap-1">
+                          <FileText size={11} /> Report
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-4 space-y-2">
@@ -263,22 +390,42 @@ const Interviews: React.FC = () => {
                         {new Date(interview.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
+
+                    {/* Notes preview */}
+                    {hasReport && interview.status === 'completed' && (
+                      <p
+                        onClick={() => setReportInterview(interview)}
+                        className="mt-3 text-xs text-slate-400 line-clamp-2 italic cursor-pointer hover:text-slate-600 transition-colors"
+                      >
+                        "{interview.notes}"
+                      </p>
+                    )}
                   </div>
 
                   {/* Action */}
                   <div className="mt-6 pt-5 border-t border-slate-50">
-                    <button
-                      onClick={() => navigate(`/interview/${interview._id}`)}
-                      disabled={!isActive}
-                      className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                        isActive
-                          ? 'bg-slate-900 group-hover:bg-brand text-white shadow-lg shadow-slate-900/10 group-hover:shadow-brand/20'
-                          : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                      }`}
-                    >
-                      <Play size={15} fill={isActive ? 'currentColor' : 'none'} />
-                      {interview.status === 'live' ? 'Join Now' : interview.status === 'scheduled' ? 'Enter Room' : 'View Room'}
-                    </button>
+                    {interview.status === 'completed' ? (
+                      <button
+                        onClick={() => setReportInterview(interview)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all bg-slate-50 hover:bg-brand/10 text-slate-500 hover:text-brand border border-slate-100 hover:border-brand/20"
+                      >
+                        <FileText size={15} />
+                        {hasReport ? 'View report' : 'Write report'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/interview/${interview._id}`)}
+                        disabled={!isActive}
+                        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                          isActive
+                            ? 'bg-slate-900 group-hover:bg-brand text-white shadow-lg shadow-slate-900/10 group-hover:shadow-brand/20'
+                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <Play size={15} fill={isActive ? 'currentColor' : 'none'} />
+                        {interview.status === 'live' ? 'Join Now' : interview.status === 'scheduled' ? 'Enter Room' : 'View Room'}
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               );

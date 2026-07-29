@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "PowerShell(Get-WmiObject *)",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(Stop-Process *)",
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:writing-plans)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(docker compose *)",
+      "Bash(netstat -ano)"
     ]
   }
 }

@@ -149,7 +149,7 @@ const Schedule: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch('http://localhost:3000/api/interviews')
+    fetch('http://localhost:3001/api/interviews')
       .then((r) => r.json())
       .then((data) => setInterviews(Array.isArray(data) ? data : []))
       .catch(() => setInterviews([]))

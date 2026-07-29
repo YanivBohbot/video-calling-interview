@@ -166,8 +166,8 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     Promise.all([
-      fetch('http://localhost:3000/api/interviews/stats').then((r) => r.json()),
-      fetch('http://localhost:3000/api/interviews/activity').then((r) => r.json()),
+      fetch('http://localhost:3001/api/interviews/stats').then((r) => r.json()),
+      fetch('http://localhost:3001/api/interviews/activity').then((r) => r.json()),
     ])
       .then(([s, a]) => {
         setStats(s);
@@ -176,7 +176,7 @@ const Dashboard: React.FC = () => {
       .catch(console.error)
       .finally(() => setStatsLoad(false));
 
-    fetch('http://localhost:3000/api/interviews')
+    fetch('http://localhost:3001/api/interviews')
       .then((r) => r.json())
       .then((data: Interview[]) => {
         if (!Array.isArray(data)) return;

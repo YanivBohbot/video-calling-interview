@@ -54,7 +54,7 @@ const NewInterview: React.FC = () => {
     const scheduledAt = new Date(`${formData.date}T${formData.time}`);
 
     try {
-      const response = await fetch('http://localhost:3000/api/interviews', {
+      const response = await fetch('http://localhost:3001/api/interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

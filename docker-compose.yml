@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: talentiq_secret
       POSTGRES_DB: talentiq
     ports:
-      - "5436:5432"
+      - "6300:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped

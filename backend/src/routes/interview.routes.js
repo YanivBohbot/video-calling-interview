@@ -19,6 +19,9 @@ router.get("/:id", controller.getInterview);
 // Update interview status
 router.patch("/:id/status", controller.updateInterviewStatus);
 
+// Update interview notes / status (compte rendu)
+router.patch("/:id", controller.updateInterview);
+
 // Delete interview
 router.delete("/:id", controller.deleteInterview);
 
