@@ -42,13 +42,54 @@ describe("flushAllDirty", () => {
     const update = vi.fn().mockResolvedValue({});
     await flushAllDirty(state, { update });
 
+    // Exactly one write, and it was for room-1 — the already-clean room-2 was
+    // never sent to the DB at all.
     expect(update).toHaveBeenCalledOnce();
     expect(update).toHaveBeenCalledWith({
       where: { id: "room-1" },
       data: { codeSnapshot: "a", codeLanguage: "javascript" },
     });
+    expect(update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "room-2" } }),
+    );
     expect(state.get("room-1").dirty).toBe(false);
-    expect(state.get("room-2").dirty).toBe(false); // untouched, was already clean
+    expect(state.get("room-2")).toEqual({ code: "b", language: "python", dirty: false });
+  });
+
+  it("keeps a room dirty when a new edit lands mid-flush (lost-update race)", async () => {
+    const entry = { code: "old", language: "javascript", dirty: true };
+    const state = new Map([["room-1", entry]]);
+
+    // Simulate a `code-change` arriving while the DB write is still in flight:
+    // the value that actually lands in Postgres is "old", not "newer".
+    const update = vi.fn().mockImplementation(async () => {
+      entry.code = "newer";
+      return {};
+    });
+
+    await flushAllDirty(state, { update });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "room-1" },
+      data: { codeSnapshot: "old", codeLanguage: "javascript" },
+    });
+    // Must stay dirty so the next flush pass (or flush-on-exit) persists "newer".
+    expect(state.get("room-1").dirty).toBe(true);
+    expect(state.get("room-1").code).toBe("newer");
+  });
+
+  it("keeps a room dirty when the language changes mid-flush", async () => {
+    const entry = { code: "a", language: "javascript", dirty: true };
+    const state = new Map([["room-1", entry]]);
+
+    const update = vi.fn().mockImplementation(async () => {
+      entry.language = "python";
+      return {};
+    });
+
+    await flushAllDirty(state, { update });
+
+    expect(state.get("room-1").dirty).toBe(true);
   });
 
   it("leaves a room dirty and does not throw when the update fails with P2025", async () => {
