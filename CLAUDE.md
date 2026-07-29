@@ -51,7 +51,7 @@ Everything (routes, controllers) is centralized: there is one `controller.js` wi
 
 ### Real-time collaboration is a second, parallel channel
 
-`server.js` creates a Socket.io server alongside the Express app (not under `/api`). Rooms are joined by interview ID; `CollaborativeEditor.tsx` connects directly to `http://localhost:3000` (hardcoded, not env-driven) and emits/listens on `join-room`, `code-change`/`code-update`, `language-change`/`language-update`, `code-execution`/`execution-result`. This is presence/broadcast only — no state is persisted server-side; a client refresh loses in-progress edits until another peer re-broadcasts.
+`server.js` creates a Socket.io server alongside the Express app (not under `/api`). Rooms are joined by interview ID; `CollaborativeEditor.tsx` connects directly to `http://localhost:3001` (hardcoded, not env-driven) and emits/listens on `join-room`, `code-change`/`code-update`, `language-change`/`language-update`, `code-execution`/`execution-result`. This is presence/broadcast only — no state is persisted server-side; a client refresh loses in-progress edits until another peer re-broadcasts.
 
 Code execution (the "Run" button) calls the public Piston API (`emkc.org`) directly from the frontend — it is not proxied through the backend.
 

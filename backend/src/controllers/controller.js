@@ -40,6 +40,25 @@ const INTERVIEWER_SELECT = {
   clerkId: true,
 };
 
+// Every scalar on the Interview model EXCEPT `codeSnapshot` and `questions`,
+// which list views never render and which can be arbitrarily large.
+const INTERVIEW_LIST_SELECT = {
+  id: true,
+  interviewerId: true,
+  candidateName: true,
+  candidateEmail: true,
+  role: true,
+  scheduledAt: true,
+  status: true,
+  duration: true,
+  interviewType: true,
+  notes: true,
+  codeLanguage: true,
+  createdAt: true,
+  updatedAt: true,
+  interviewer: { select: INTERVIEWER_SELECT },
+};
+
 const resolveInterviewerId = async (raw) => {
   if (!raw) return null;
   if (raw === "demo") {
@@ -68,7 +87,10 @@ export const listInterviews = async (req, res) => {
     const interviews = await prisma.interview.findMany({
       where,
       orderBy: { scheduledAt: "asc" },
-      include: { interviewer: { select: INTERVIEWER_SELECT } },
+      // Explicit select rather than include: list views never render the code,
+      // and `codeSnapshot` can be a large blob. `questions` is excluded for the
+      // same reason. Every other scalar the frontend reads stays in the payload.
+      select: INTERVIEW_LIST_SELECT,
     });
     return res.status(200).json(interviews.map(toInterviewDoc));
   } catch (error) {

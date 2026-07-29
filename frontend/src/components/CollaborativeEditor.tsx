@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { io, Socket } from 'socket.io-client';
-import { Code, Play, Download, Copy } from 'lucide-react';
+import { Code, Play, Copy } from 'lucide-react';
 
 interface CodeEditorProps {
   roomId: string;
