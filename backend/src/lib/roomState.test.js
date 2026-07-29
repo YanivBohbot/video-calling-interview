@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { applyCodeChange, applyLanguageChange } from "./roomState.js";
+import { describe, it, expect, vi } from "vitest";
+import { applyCodeChange, applyLanguageChange, flushAllDirty, flushRoomOnExit } from "./roomState.js";
 
 describe("applyCodeChange", () => {
   it("creates a new entry with dirty=true on first call", () => {
@@ -30,5 +30,74 @@ describe("applyLanguageChange", () => {
     const state = new Map([["room-1", { code: "keep me", language: "javascript", dirty: false }]]);
     applyLanguageChange(state, "room-1", "cpp");
     expect(state.get("room-1")).toEqual({ code: "keep me", language: "cpp", dirty: true });
+  });
+});
+
+describe("flushAllDirty", () => {
+  it("writes dirty rooms to the DB and clears their dirty flag", async () => {
+    const state = new Map([
+      ["room-1", { code: "a", language: "javascript", dirty: true }],
+      ["room-2", { code: "b", language: "python", dirty: false }],
+    ]);
+    const update = vi.fn().mockResolvedValue({});
+    await flushAllDirty(state, { update });
+
+    expect(update).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "room-1" },
+      data: { codeSnapshot: "a", codeLanguage: "javascript" },
+    });
+    expect(state.get("room-1").dirty).toBe(false);
+    expect(state.get("room-2").dirty).toBe(false); // untouched, was already clean
+  });
+
+  it("leaves a room dirty and does not throw when the update fails with P2025", async () => {
+    const state = new Map([["room-1", { code: "a", language: "javascript", dirty: true }]]);
+    const err = Object.assign(new Error("not found"), { code: "P2025" });
+    const update = vi.fn().mockRejectedValue(err);
+
+    await expect(flushAllDirty(state, { update })).resolves.toBeUndefined();
+    expect(state.get("room-1").dirty).toBe(true);
+  });
+
+  it("does not throw on an unexpected error either, and leaves the room dirty", async () => {
+    const state = new Map([["room-1", { code: "a", language: "javascript", dirty: true }]]);
+    const update = vi.fn().mockRejectedValue(new Error("connection reset"));
+
+    await expect(flushAllDirty(state, { update })).resolves.toBeUndefined();
+    expect(state.get("room-1").dirty).toBe(true);
+  });
+});
+
+describe("flushRoomOnExit", () => {
+  it("flushes a dirty room then removes it from state", async () => {
+    const state = new Map([["room-1", { code: "a", language: "javascript", dirty: true }]]);
+    const update = vi.fn().mockResolvedValue({});
+
+    await flushRoomOnExit(state, { update }, "room-1");
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "room-1" },
+      data: { codeSnapshot: "a", codeLanguage: "javascript" },
+    });
+    expect(state.has("room-1")).toBe(false);
+  });
+
+  it("removes a clean room without calling update", async () => {
+    const state = new Map([["room-1", { code: "a", language: "javascript", dirty: false }]]);
+    const update = vi.fn();
+
+    await flushRoomOnExit(state, { update }, "room-1");
+
+    expect(update).not.toHaveBeenCalled();
+    expect(state.has("room-1")).toBe(false);
+  });
+
+  it("is a no-op when the room does not exist in state", async () => {
+    const state = new Map();
+    const update = vi.fn();
+
+    await expect(flushRoomOnExit(state, { update }, "missing-room")).resolves.toBeUndefined();
+    expect(update).not.toHaveBeenCalled();
   });
 });
