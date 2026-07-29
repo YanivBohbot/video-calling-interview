@@ -5,11 +5,15 @@ import { Code, Play, Download, Copy } from 'lucide-react';
 
 interface CodeEditorProps {
   roomId: string;
+  initialCode?: string;
+  initialLanguage?: string;
 }
 
-const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId }) => {
-  const [code, setCode] = useState<string>('// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();');
-  const [language, setLanguage] = useState<string>('javascript');
+const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage }) => {
+  const [code, setCode] = useState<string>(
+    initialCode ?? '// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();',
+  );
+  const [language, setLanguage] = useState<string>(initialLanguage ?? 'javascript');
   const [output, setOutput] = useState<string>('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
