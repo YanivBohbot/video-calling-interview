@@ -1,5 +1,7 @@
 import express from "express";
 import controller from "../controllers/controller.js";
+import aiController from "../controllers/aiController.js";
+import { protectRoute } from "../middlewares/protectRoute.js";
 
 const router = express.Router();
 
@@ -12,6 +14,9 @@ router.get("/", controller.listInterviews);
 
 // Create a new interview
 router.post("/", controller.createInterview);
+
+// AI: generate questions for an interview (must come before generic /:id routes)
+router.post("/:id/questions/generate", protectRoute, aiController.generateQuestions);
 
 // Get single interview
 router.get("/:id", controller.getInterview);
