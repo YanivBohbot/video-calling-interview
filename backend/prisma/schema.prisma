@@ -36,6 +36,9 @@ model Interview {
   duration       Int      @default(60)
   interviewType  String   @default("technical")
   notes          String   @default("")
+  codeSnapshot   String?
+  codeLanguage   String?  @default("javascript")
+  questions      Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
