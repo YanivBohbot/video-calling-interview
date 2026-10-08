@@ -16,19 +16,29 @@ let cachedToolsPromise = null;
 export const getLeetCodeTools = async ({ client } = {}) => {
   if (cachedToolsPromise) return cachedToolsPromise;
 
-  cachedToolsPromise = (async () => {
+  const attempt = (async () => {
     try {
       const mcpClient = client || buildDefaultClient();
-      const tools = await mcpClient.getTools();
-      return tools.filter((t) => ALLOWED_TOOL_NAMES.has(t.name));
+      const tools = (await mcpClient.getTools()).filter((t) => ALLOWED_TOOL_NAMES.has(t.name));
+      console.log("leetcodeMcpClient: loaded tools:", tools.map((t) => t.name));
+      return tools;
     } catch (err) {
       console.error(
         "leetcodeMcpClient: failed to connect, continuing without LeetCode tools:",
         err.message,
       );
-      return [];
+      return null;
     }
   })();
+
+  // Don't memoize failures: a transient cold-start error (e.g. the npx download timing
+  // out) must not disable LeetCode grounding for the rest of the process. The reset runs
+  // in .then() so it always lands after the assignment, even if the attempt failed synchronously.
+  cachedToolsPromise = attempt.then((tools) => {
+    if (tools) return tools;
+    cachedToolsPromise = null;
+    return [];
+  });
 
   return cachedToolsPromise;
 };

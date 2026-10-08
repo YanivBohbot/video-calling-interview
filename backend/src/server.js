@@ -13,6 +13,7 @@ import interviewRoutes from "./routes/interview.routes.js";
 import streamRoutes from "./routes/stream.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import sessionRoutes from "./routes/session.routes.js";
+import { getLeetCodeTools } from "./lib/agents/leetcodeMcpClient.js";
 
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -140,6 +141,10 @@ const startServer = async () => {
     httpServer.listen(ENV.PORT, () => {
       console.log(`Server running on port ${ENV.PORT}`);
     });
+    // Warm the LeetCode MCP connection at boot (fire-and-forget) so the npx download and
+    // stdio handshake happen now, not on the first user-facing generate request.
+    // getLeetCodeTools never rejects; it resolves to [] on failure and retries on next call.
+    getLeetCodeTools().catch(() => {});
   } catch (err) {
     console.log("Start server error:", err);
   }

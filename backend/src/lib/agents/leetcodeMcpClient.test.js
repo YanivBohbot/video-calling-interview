@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getLeetCodeTools, _resetLeetCodeToolsCache } from "./leetcodeMcpClient.js";
 
 const makeMockClient = (tools) => ({
@@ -12,6 +12,12 @@ const makeFailingClient = (message) => ({
 describe("getLeetCodeTools", () => {
   beforeEach(() => {
     _resetLeetCodeToolsCache();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("filters the server's tools down to the allowlist", async () => {
@@ -44,5 +50,40 @@ describe("getLeetCodeTools", () => {
     await getLeetCodeTools({ client });
 
     expect(client.getTools).toHaveBeenCalledOnce();
+  });
+
+  it("does not cache a failed connection — the next call retries and can succeed", async () => {
+    const failing = makeFailingClient("npx download timed out");
+    await expect(getLeetCodeTools({ client: failing })).resolves.toEqual([]);
+
+    const healthy = makeMockClient([{ name: "get_problem" }, { name: "get_user_profile" }]);
+    const tools = await getLeetCodeTools({ client: healthy });
+
+    expect(healthy.getTools).toHaveBeenCalledOnce();
+    expect(tools.map((t) => t.name)).toEqual(["get_problem"]);
+  });
+
+  it("does not cache a failure even when the client throws synchronously", async () => {
+    const throwing = {
+      getTools: vi.fn(() => {
+        throw new Error("spawn npx ENOENT");
+      }),
+    };
+    await expect(getLeetCodeTools({ client: throwing })).resolves.toEqual([]);
+
+    const healthy = makeMockClient([{ name: "search_problems" }]);
+    const tools = await getLeetCodeTools({ client: healthy });
+
+    expect(tools.map((t) => t.name)).toEqual(["search_problems"]);
+  });
+
+  it("logs the names of the tools that loaded", async () => {
+    const client = makeMockClient([{ name: "search_problems" }, { name: "get_user_profile" }]);
+
+    await getLeetCodeTools({ client });
+
+    expect(console.log).toHaveBeenCalledWith("leetcodeMcpClient: loaded tools:", [
+      "search_problems",
+    ]);
   });
 });
