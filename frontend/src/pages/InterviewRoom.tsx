@@ -97,12 +97,15 @@ const ReportModal: React.FC<{
 
 const API = 'http://localhost:3001/api';
 
+// `questions` state lives in InterviewRoom so it survives tab switches (this panel
+// unmounts when another tab is active) and reflects the latest saved list.
 const QuestionsPanel: React.FC<{
   interviewId: string;
   clerkId: string;
-  initialQuestions?: Question[] | null;
-}> = ({ interviewId, clerkId, initialQuestions }) => {
-  const [questions, setQuestions] = React.useState<Question[]>(initialQuestions ?? []);
+  questions: Question[];
+  setQuestions: React.Dispatch<React.SetStateAction<Question[]>>;
+  onSaved: (saved: Question[]) => void;
+}> = ({ interviewId, clerkId, questions, setQuestions, onSaved }) => {
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -149,6 +152,8 @@ const QuestionsPanel: React.FC<{
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
         setError(body?.message || 'Failed to save questions');
+      } else {
+        onSaved(questions);
       }
     } catch (e: any) {
       setError(e?.message || 'Network error');
@@ -248,7 +253,14 @@ export const InterviewRoom: React.FC = () => {
     codeSnapshot?: string | null;
     codeLanguage?: string | null;
     questions?: Question[] | null;
+    interviewerId?: { clerkID?: string } | null;
   } | null>(null);
+  const [questions, setQuestions] = React.useState<Question[]>([]);
+
+  // Only the interviewer may see/generate/save questions — the room URL is also the
+  // candidate's share link. Guest/demo mode has no Clerk user, so the tab stays hidden
+  // there (we can't tell a guest interviewer from a guest candidate).
+  const isInterviewer = !!user?.id && interviewData?.interviewerId?.clerkID === user.id;
 
   React.useEffect(() => {
     if (!id) return;
@@ -303,7 +315,9 @@ export const InterviewRoom: React.FC = () => {
         return r.json();
       })
       .then((data) => {
-        if (!cancelled) setInterviewData(data);
+        if (cancelled) return;
+        setInterviewData(data);
+        setQuestions(data?.questions ?? []);
       })
       .catch((err) => console.error('Failed to fetch interview data:', err));
 
@@ -397,15 +411,17 @@ export const InterviewRoom: React.FC = () => {
                     <PenTool size={16} />
                     System Design
                   </button>
-                  <button
-                    onClick={() => setActiveTab('questions')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === 'questions' ? 'bg-brand text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                    }`}
-                  >
-                    <Sparkles size={16} />
-                    Questions
-                  </button>
+                  {isInterviewer && (
+                    <button
+                      onClick={() => setActiveTab('questions')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeTab === 'questions' ? 'bg-brand text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                      }`}
+                    >
+                      <Sparkles size={16} />
+                      Questions
+                    </button>
+                  )}
                 </div>
 
                 {/* Active Workspace */}
@@ -418,13 +434,17 @@ export const InterviewRoom: React.FC = () => {
                     />
                   ) : activeTab === 'design' ? (
                     <Whiteboard />
-                  ) : (
+                  ) : isInterviewer && user ? (
                     <QuestionsPanel
                       interviewId={id || 'default'}
-                      clerkId={user?.id || 'demo'}
-                      initialQuestions={interviewData?.questions}
+                      clerkId={user.id}
+                      questions={questions}
+                      setQuestions={setQuestions}
+                      onSaved={(saved) =>
+                        setInterviewData((prev) => (prev ? { ...prev, questions: saved } : prev))
+                      }
                     />
-                  )}
+                  ) : null}
                 </div>
               </div>
 
