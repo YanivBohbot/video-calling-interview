@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { distributeCounts, makePlannerNode, makeResearcherNode } from "./nodes.js";
+import { distributeCounts, makePlannerNode, makeResearcherNode, makeDrafterNode } from "./nodes.js";
 
 describe("distributeCounts", () => {
   it("splits counts proportionally and sums to the total, largest remainder first", () => {
@@ -51,5 +51,42 @@ describe("researcher node", () => {
     await expect(
       node({ plan: { categoryCounts: { technical: 4 } }, role: "x", interviewType: "technical" }),
     ).resolves.toEqual({ research: [] });
+  });
+});
+
+describe("drafter node", () => {
+  const sampleQuestions = [{ text: "Explain closures", category: "technical", difficulty: "medium" }];
+
+  it("returns the agent's drafted questions and passes the fallback flag through", async () => {
+    const buildDrafterAgent = vi.fn().mockResolvedValue({
+      invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: sampleQuestions } }),
+    });
+    const node = makeDrafterNode({ buildDrafterAgent });
+    const result = await node({
+      plan: { categoryCounts: { technical: 1 } },
+      research: [],
+      useFallbackModel: true,
+      count: 1,
+      role: "Backend Engineer",
+      interviewType: "technical",
+    });
+    expect(result).toEqual({ draftQuestions: sampleQuestions });
+    expect(buildDrafterAgent).toHaveBeenCalledWith(true);
+  });
+
+  it("includes research notes and the requested count in the user message", async () => {
+    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: sampleQuestions } }) };
+    const node = makeDrafterNode({ buildDrafterAgent: async () => agent });
+    await node({
+      plan: { categoryCounts: { technical: 1 } },
+      research: ["Grounded in Two Sum"],
+      useFallbackModel: false,
+      count: 1,
+      role: "x",
+      interviewType: "technical",
+    });
+    const content = agent.invoke.mock.calls[0][0].messages[0].content;
+    expect(content).toContain("Grounded in Two Sum");
+    expect(content).toContain("Generate exactly 1");
   });
 });

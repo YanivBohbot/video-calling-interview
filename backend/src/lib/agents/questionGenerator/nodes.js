@@ -40,3 +40,25 @@ export const makeResearcherNode = ({ buildResearcherAgent }) => async (state) =>
     return { research: [] };
   }
 };
+
+export const makeDrafterNode = ({ buildDrafterAgent }) => async (state) => {
+  const agent = await buildDrafterAgent(state.useFallbackModel);
+  const result = await agent.invoke(
+    {
+      messages: [
+        {
+          role: "user",
+          content: [
+            `Generate exactly ${state.count} interview questions.`,
+            `Role: ${state.role}`,
+            `Interview type: ${state.interviewType}`,
+            `Category mix: ${JSON.stringify(state.plan.categoryCounts)}`,
+            `Research notes: ${state.research.length ? state.research.join(" ") : "none"}`,
+          ].join("\n"),
+        },
+      ],
+    },
+    { recursionLimit: 10 },
+  );
+  return { draftQuestions: result.structuredResponse.questions };
+};
