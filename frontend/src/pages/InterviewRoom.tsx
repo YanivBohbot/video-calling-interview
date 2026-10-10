@@ -109,6 +109,10 @@ const QuestionsPanel: React.FC<{
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Set while an AI draft is paused on the backend awaiting approval; null when the
+  // panel is just editing already-saved questions.
+  const [jobId, setJobId] = React.useState<string | null>(null);
+  const savedBeforeDraft = React.useRef<Question[]>([]);
 
   const generate = async () => {
     setLoading(true);
@@ -127,7 +131,9 @@ const QuestionsPanel: React.FC<{
         );
         return;
       }
-      setQuestions(body.questions);
+      if (!jobId) savedBeforeDraft.current = questions;
+      setJobId(body.jobId);
+      setQuestions(body.draftQuestions);
     } catch (e: any) {
       setError(e?.message || 'Network error');
     } finally {
@@ -140,20 +146,39 @@ const QuestionsPanel: React.FC<{
 
   const deleteRow = (i: number) => setQuestions((qs) => qs.filter((_, idx) => idx !== i));
 
-  const save = async () => {
+  // A pending AI draft is approved/rejected through the paused graph; with no draft
+  // pending, Save is a plain edit of the already-saved list.
+  const resolve = async (approved: boolean) => {
     setSaving(true);
     setError(null);
     try {
-      const r = await fetch(`${API}/interviews/${interviewId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-clerk-id': clerkId },
-        body: JSON.stringify({ questions }),
-      });
+      const r = jobId
+        ? await fetch(`${API}/interviews/${interviewId}/questions/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-clerk-id': clerkId },
+            body: JSON.stringify({ jobId, approved, questions: approved ? questions : undefined }),
+          })
+        : await fetch(`${API}/interviews/${interviewId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'x-clerk-id': clerkId },
+            body: JSON.stringify({ questions }),
+          });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        setError(body?.message || 'Failed to save questions');
-      } else {
+        if (r.status === 404 && jobId) {
+          setJobId(null);
+          setQuestions(savedBeforeDraft.current);
+          setError('This draft expired — generate a new one.');
+        } else {
+          setError(body?.message || 'Failed to save questions');
+        }
+        return;
+      }
+      setJobId(null);
+      if (approved) {
         onSaved(questions);
+      } else {
+        setQuestions(savedBeforeDraft.current);
       }
     } catch (e: any) {
       setError(e?.message || 'Network error');
@@ -226,14 +251,23 @@ const QuestionsPanel: React.FC<{
       </div>
 
       {questions.length > 0 && (
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex justify-end gap-2">
+          {jobId && (
+            <button
+              onClick={() => resolve(false)}
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold disabled:opacity-50"
+            >
+              Discard draft
+            </button>
+          )}
           <button
-            onClick={save}
+            onClick={() => resolve(true)}
             disabled={saving}
             className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Save questions
+            {jobId ? 'Approve & save' : 'Save questions'}
           </button>
         </div>
       )}
