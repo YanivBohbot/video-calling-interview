@@ -50,15 +50,19 @@ Stored in the existing `Interview.questions` JSON column — no migration. Old q
 
 ## 5. Research quality
 
-**Researcher output** changes from `{usedLeetCode, notes}` to `{ problems: [{ title, slug, difficulty }] }` (via the existing `toolStrategy`).
-- Prompt: given role + interview type + `technicalCount` (from the plan), choose `category`/`tags`/`keywords` that fit the role (e.g. backend → database, design, hash-table; frontend → javascript, string), and difficulty that fits the seniority in the role title; return up to `technicalCount` *distinct* problems on varied topics; don't use `get_daily_challenge`.
-- Variety: the node passes a random `offset` hint (0–40) in the user message so repeated runs page to different results.
-- **Anti-hallucination:** the node keeps only problems whose slug actually appeared in a `search_problems`/`get_problem` tool result during that run (read from the agent's tool messages). Max `technicalCount` problems, de-duplicated by slug.
+> **Revised during implementation (live QA).** The first version let a tool-calling agent run the searches. In live runs it ignored the offset, repeated generic problems, and hit the step limit in 3 of 7 runs (one run took 76s). The mechanism below replaced it; the goals are unchanged.
+
+**The model chooses the search; code runs it.**
+- One structured model call (no tools bound) returns `SearchQuerySchema = { category, tags (≤3), difficulty }`. Its enums are subsets of the LeetCode MCP `search_problems` enums, so the choice is always a valid tool input. The prompt maps roles to categories and tags (e.g. backend → database/algorithms + hash-table/design) and seniority to difficulty.
+- Code calls `search_problems` with `limit = technicalCount × 3` and a random `offset` of 0–20.
+- **Broadening ladder:** if results are thin, code tries again with the same filters at offset 0, then category + difficulty only, then algorithms + difficulty. Results accumulate across steps, de-duplicated, until there are `technicalCount` problems.
+- Code then randomly samples `technicalCount` distinct problems, so Regenerate gives different ones.
+- **Anti-hallucination by construction:** research titles, slugs and difficulties come only from the search output (`parseSearchProblems`). The model never supplies them.
 - Graceful degradation unchanged: any failure → `research: []`, logged.
 
 **Drafter:** receives the research list compactly (`slug — title (difficulty)`), told: use each problem for at most one *technical* question and set `sourceSlug` to it; never base behavioral or system-design questions on these problems (`sourceSlug: null`); paraphrase, don't copy descriptions.
 
-**Validator** adds one rule: two questions sharing the same `source.slug` → content-invalid (retry loop, with the error fed back to the drafter as today).
+**Validator** adds two rules: two questions sharing the same `source.slug` → content-invalid; the category mix differs from the plan → content-invalid (live QA saw a planned technical slot drafted as system-design). Both go through the retry loop, with the error fed back to the drafter as today.
 
 ## 6. Testing
 - `roleCatalog`: 6 domains × 3 seniorities compose to 18 unique titles. Frontend has no test runner → verified by `npm run build` + lint baseline + a manual check.
