@@ -7,6 +7,7 @@ import {
   makeDrafterNode,
   validatorNode,
   fallbackNode,
+  makeFinalizeNode,
 } from "./nodes.js";
 import { AIInvalidResponseError } from "./errors.js";
 
@@ -143,5 +144,27 @@ describe("fallback node", () => {
   it("sets useFallbackModel and bumps retryCount without resetting it", async () => {
     const result = await fallbackNode({ retryCount: 2 });
     expect(result).toEqual({ useFallbackModel: true, retryCount: 3 });
+  });
+});
+
+describe("finalize node", () => {
+  it("persists the approved (edited) questions, not the original draft", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const node = makeFinalizeNode({ prisma: { interview: { update } } });
+    const edited = [{ text: "Edited question", category: "technical", difficulty: "hard" }];
+    await node({
+      interviewId: "iv-1",
+      draftQuestions: [{ text: "Original", category: "technical", difficulty: "easy" }],
+      approval: { approved: true, questions: edited },
+    });
+    expect(update).toHaveBeenCalledWith({ where: { id: "iv-1" }, data: { questions: edited } });
+  });
+
+  it("falls back to the original draft when approval carries no edited questions", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const node = makeFinalizeNode({ prisma: { interview: { update } } });
+    const draft = [{ text: "Original", category: "technical", difficulty: "easy" }];
+    await node({ interviewId: "iv-1", draftQuestions: draft, approval: { approved: true } });
+    expect(update).toHaveBeenCalledWith({ where: { id: "iv-1" }, data: { questions: draft } });
   });
 });

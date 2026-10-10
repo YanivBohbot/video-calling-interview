@@ -1,4 +1,4 @@
-import { Command } from "@langchain/langgraph";
+import { Command, END, interrupt } from "@langchain/langgraph";
 import { AIInvalidResponseError } from "./errors.js";
 
 // Largest-remainder apportionment: floors each share, then hands the leftover
@@ -106,3 +106,22 @@ export const fallbackNode = async (state) => ({
   useFallbackModel: true,
   retryCount: state.retryCount + 1,
 });
+
+// On resume LangGraph re-runs this node from the top, so nothing with side
+// effects may sit before interrupt().
+export const humanApprovalNode = async (state) => {
+  const decision = interrupt({ draftQuestions: state.draftQuestions, plan: state.plan });
+  return new Command({
+    update: { approval: decision },
+    goto: decision.approved ? "finalize" : END,
+  });
+};
+
+export const makeFinalizeNode = ({ prisma }) => async (state) => {
+  const finalQuestions = state.approval?.questions ?? state.draftQuestions;
+  await prisma.interview.update({
+    where: { id: state.interviewId },
+    data: { questions: finalQuestions },
+  });
+  return {};
+};
