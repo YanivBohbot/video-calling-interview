@@ -24,3 +24,19 @@ export const makePlannerNode = () => async (state) => {
   const weights = PLANNER_WEIGHTS[state.interviewType] || PLANNER_WEIGHTS.technical;
   return { plan: { categoryCounts: distributeCounts(state.count, weights) } };
 };
+
+// Grounding is optional: an unreachable LeetCode MCP server must degrade to no
+// research, never fail the whole generation.
+export const makeResearcherNode = ({ buildResearcherAgent }) => async (state) => {
+  if (!state.plan.categoryCounts.technical) return { research: [] };
+  try {
+    const agent = await buildResearcherAgent();
+    const result = await agent.invoke({
+      messages: [{ role: "user", content: `Role: ${state.role}\nInterview type: ${state.interviewType}` }],
+    });
+    const { usedLeetCode, notes } = result.structuredResponse;
+    return { research: usedLeetCode ? [notes] : [] };
+  } catch {
+    return { research: [] };
+  }
+};
