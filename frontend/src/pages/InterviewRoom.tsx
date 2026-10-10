@@ -314,9 +314,11 @@ export const InterviewRoom: React.FC = () => {
   const [pendingJobId, setPendingJobId] = React.useState<string | null>(null);
 
   // Only the interviewer may see/generate/save questions — the room URL is also the
-  // candidate's share link. Guest/demo mode has no Clerk user, so the tab stays hidden
-  // there (we can't tell a guest interviewer from a guest candidate).
-  const isInterviewer = !!user?.id && interviewData?.interviewerId?.clerkID === user.id;
+  // candidate's share link. Guest mode has no identities, so a signed-out viewer counts
+  // as the interviewer only for interviews owned by the shared "demo" user.
+  const ownerClerkId = interviewData?.interviewerId?.clerkID;
+  const isInterviewer = user?.id ? ownerClerkId === user.id : ownerClerkId === 'demo';
+  const viewerClerkId = user?.id ?? 'demo';
 
   React.useEffect(() => {
     if (!id) return;
@@ -490,10 +492,10 @@ export const InterviewRoom: React.FC = () => {
                     />
                   ) : activeTab === 'design' ? (
                     <Whiteboard />
-                  ) : isInterviewer && user ? (
+                  ) : isInterviewer ? (
                     <QuestionsPanel
                       interviewId={id || 'default'}
-                      clerkId={user.id}
+                      clerkId={viewerClerkId}
                       questions={questions}
                       setQuestions={setQuestions}
                       jobId={pendingJobId}
