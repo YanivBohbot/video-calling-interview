@@ -100,6 +100,16 @@ export const resumeQuestionGeneration = async ({ interviewId, jobId, approved, q
   // Resuming a thread that isn't paused at approval (never started, or already
   // resolved) would silently no-op and look like success — refuse it instead.
   const snapshot = await runGraph.getState(config);
+  // Parked at finalize = the human already approved but the DB write failed;
+  // retry the write with the recorded approval rather than stranding the job.
+  if (snapshot.next?.includes("finalize")) {
+    try {
+      await runGraph.invoke(null, config);
+    } catch (err) {
+      throw new AIProviderError(err.message);
+    }
+    return { approved: true };
+  }
   if (!snapshot.next?.includes("humanApproval")) {
     throw new UnknownJobError(`No pending approval for job ${jobId}`);
   }

@@ -94,6 +94,24 @@ describe("question generator graph", () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
+  it("a finalize DB failure leaves the approval retryable instead of stranding the job", async () => {
+    const update = vi.fn().mockRejectedValueOnce(new Error("db blip")).mockResolvedValue({});
+    const graph = buildGraph(makeDeps({ update }));
+    const { jobId } = await startQuestionGeneration(
+      { interviewId: "iv-9", role: "x", interviewType: "technical", count: 2 },
+      { graph },
+    );
+    await expect(
+      resumeQuestionGeneration({ interviewId: "iv-9", jobId, approved: true, questions: goodQuestions }, { graph }),
+    ).rejects.toThrow();
+    const result = await resumeQuestionGeneration(
+      { interviewId: "iv-9", jobId, approved: true, questions: goodQuestions },
+      { graph },
+    );
+    expect(result).toEqual({ approved: true });
+    expect(update).toHaveBeenLastCalledWith({ where: { id: "iv-9" }, data: { questions: goodQuestions } });
+  });
+
   it("reaches fallback then throws AIInvalidResponseError when the draft is always invalid", async () => {
     const graph = buildGraph(makeDeps({ draftQuestions: [] }));
     await expect(
