@@ -4,6 +4,8 @@ import { Video, Calendar, User, Mail, Briefcase, PlusCircle, ArrowLeft, Clock, C
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { ROLE_DOMAINS, SENIORITIES, CUSTOM_ROLE, composeRole } from '../lib/roleCatalog';
+import QuestionsPanel from '../components/QuestionsPanel';
+import type { Question } from '../lib/questions';
 
 const INTERVIEW_TYPES = [
   { value: 'technical',        label: 'Technical Screen' },
@@ -48,6 +50,9 @@ const NewInterview: React.FC = () => {
   const [roleDomain, setRoleDomain] = useState<string>('backend');
   const [roleSeniority, setRoleSeniority] = useState<string>('mid');
   const [customRole, setCustomRole] = useState('');
+  const [genQuestions, setGenQuestions] = useState<Question[]>([]);
+  const [genJobId, setGenJobId] = useState<string | null>(null);
+  const [savedGenQuestions, setSavedGenQuestions] = useState<Question[]>([]);
 
   const resolvedRole = () => {
     if (roleDomain === CUSTOM_ROLE) return customRole.trim();
@@ -189,6 +194,25 @@ const NewInterview: React.FC = () => {
               </div>
             </div>
 
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-700">Generate questions (optional)</p>
+              <p className="text-xs text-slate-500">
+                Approved questions show up in the interview room's Code tab, where you can ask them one at a time.
+              </p>
+              <div className="bg-slate-900 rounded-2xl">
+                <QuestionsPanel
+                  interviewId={created._id}
+                  clerkId={user?.id ?? 'demo'}
+                  questions={genQuestions}
+                  setQuestions={setGenQuestions}
+                  jobId={genJobId}
+                  setJobId={setGenJobId}
+                  savedQuestions={savedGenQuestions}
+                  onSaved={setSavedGenQuestions}
+                />
+              </div>
+            </div>
+
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => navigate('/')}
@@ -203,6 +227,9 @@ const NewInterview: React.FC = () => {
                   setRoleDomain('backend');
                   setRoleSeniority('mid');
                   setCustomRole('');
+                  setGenQuestions([]);
+                  setGenJobId(null);
+                  setSavedGenQuestions([]);
                 }}
                 className="flex-1 py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-hover transition-all"
               >

@@ -286,6 +286,7 @@ export const InterviewRoom: React.FC = () => {
                       roomId={id || 'default'}
                       initialCode={interviewData?.codeSnapshot ?? undefined}
                       initialLanguage={interviewData?.codeLanguage ?? undefined}
+                      askableQuestions={isInterviewer ? interviewData?.questions ?? [] : undefined}
                     />
                   ) : activeTab === 'design' ? (
                     <Whiteboard />
