@@ -114,25 +114,24 @@ const validateContent = (state) => {
     if (seen.has(key)) errors.push(`duplicate question: "${q.text}"`);
     seen.add(key);
   }
-  if (state.plan) {
-    for (const [category, expected] of Object.entries(state.plan.categoryCounts)) {
-      const actual = state.draftQuestions.filter((q) => q.category === category).length;
-      if (actual !== expected) errors.push(`expected ${expected} ${category} questions, got ${actual}`);
-    }
-  }
-  const usedSources = new Set();
-  for (const q of state.draftQuestions) {
-    if (!q.source) continue;
-    if (usedSources.has(q.source.slug)) errors.push(`two questions use the same LeetCode problem: ${q.source.slug}`);
-    usedSources.add(q.source.slug);
-  }
   return errors;
 };
 
+// Soft: worth a retry, but an interviewer can re-categorise at approval.
+const validateMix = (state) => {
+  if (!state.plan) return [];
+  return Object.entries(state.plan.categoryCounts)
+    .map(([category, expected]) => [category, expected, state.draftQuestions.filter((q) => q.category === category).length])
+    .filter(([, expected, actual]) => actual !== expected)
+    .map(([category, expected, actual]) => `expected ${expected} ${category} questions, got ${actual}`);
+};
+
 // Content failures loop back to the drafter; once those retries are spent the
-// fallback model gets exactly one pass, and a failure after that bubbles up.
+// fallback model gets exactly one pass. After that a broken draft bubbles up,
+// while one whose only problem is the category mix goes to the human.
 export const validatorNode = async (state) => {
-  const errors = validateContent(state);
+  const hardErrors = validateContent(state);
+  const errors = [...hardErrors, ...validateMix(state)];
   if (errors.length === 0) {
     return new Command({ update: { validationErrors: [] }, goto: "humanApproval" });
   }
@@ -144,6 +143,9 @@ export const validatorNode = async (state) => {
   }
   if (!state.useFallbackModel) {
     return new Command({ update: { validationErrors: errors }, goto: "fallback" });
+  }
+  if (hardErrors.length === 0) {
+    return new Command({ update: { validationErrors: errors }, goto: "humanApproval" });
   }
   throw new AIInvalidResponseError(`Validation failed after fallback: ${errors.join("; ")}`);
 };

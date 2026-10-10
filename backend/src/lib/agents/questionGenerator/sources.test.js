@@ -69,6 +69,18 @@ describe("attachSources", () => {
     expect(out.every((q) => q.source === undefined)).toBe(true);
   });
 
+  it("keeps a problem's source only on the first question that uses it", () => {
+    const out = attachSources(
+      [
+        { text: "First", category: "technical", difficulty: "medium", sourceSlug: "rank-scores" },
+        { text: "Second", category: "technical", difficulty: "medium", sourceSlug: "rank-scores" },
+      ],
+      research,
+    );
+    expect(out[0].source?.slug).toBe("rank-scores");
+    expect(out[1]).toEqual({ text: "Second", category: "technical", difficulty: "medium" });
+  });
+
   it("leaves questions without a sourceSlug unchanged", () => {
     const q = { text: "Plain", category: "technical", difficulty: "easy" };
     expect(attachSources([q], research)).toEqual([q]);

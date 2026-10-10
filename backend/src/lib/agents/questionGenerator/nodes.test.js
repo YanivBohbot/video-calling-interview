@@ -282,19 +282,34 @@ describe("validator node", () => {
     expect(result.update.validationErrors.some((e) => e.includes("expected 2 technical"))).toBe(true);
   });
 
-  it("rejects two questions built on the same LeetCode problem", async () => {
-    const source = { type: "leetcode", title: "Rank Scores", slug: "rank-scores", difficulty: "Medium", url: "https://leetcode.com/problems/rank-scores/" };
+  // A category-mix slip is something the interviewer can fix at approval; after the
+  // fallback's attempt it must not fail the whole generation as "AI unavailable".
+  it("accepts a draft after the fallback when only the category mix is still off", async () => {
     const result = await validatorNode({
+      plan: { categoryCounts: { technical: 2, behavioral: 1 } },
       draftQuestions: [
-        { text: "Q one", category: "technical", difficulty: "medium", source },
-        { text: "Q two", category: "technical", difficulty: "medium", source },
+        { text: "Tech one", category: "technical", difficulty: "medium" },
+        { text: "Design a chat app", category: "system-design", difficulty: "hard" },
+        { text: "A conflict you solved", category: "behavioral", difficulty: "easy" },
       ],
-      count: 2,
-      retryCount: 0,
-      useFallbackModel: false,
+      count: 3,
+      retryCount: 3,
+      useFallbackModel: true,
     });
-    expect(result.goto).toEqual(["drafter"]);
-    expect(result.update.validationErrors.some((e) => e.includes("rank-scores"))).toBe(true);
+    expect(result.goto).toEqual(["humanApproval"]);
+    expect(result.update.validationErrors.some((e) => e.includes("expected 2 technical"))).toBe(true);
+  });
+
+  it("still throws after the fallback when the draft is broken, not just mis-mixed", async () => {
+    await expect(
+      validatorNode({
+        plan: { categoryCounts: { technical: 2 } },
+        draftQuestions: [{ text: "Only one", category: "technical", difficulty: "easy" }],
+        count: 2,
+        retryCount: 3,
+        useFallbackModel: true,
+      }),
+    ).rejects.toBeInstanceOf(AIInvalidResponseError);
   });
 
   it("catches a wrong question count", async () => {

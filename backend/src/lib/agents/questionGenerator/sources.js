@@ -23,12 +23,16 @@ export const parseSearchProblems = (raw) => {
 };
 
 // The model only names a slug; title, difficulty and URL come from the search result
-// and from code, and only technical questions may carry a source.
+// and from code. Only technical questions may carry a source, and each problem is
+// credited once — a reused slug is dropped rather than failing the run.
 export const attachSources = (drafts, research) => {
   const bySlug = new Map(research.map((p) => [p.slug, p]));
+  const used = new Set();
   return drafts.map(({ sourceSlug, ...question }) => {
-    const problem = question.category === "technical" && sourceSlug ? bySlug.get(sourceSlug) : undefined;
+    const problem =
+      question.category === "technical" && sourceSlug && !used.has(sourceSlug) ? bySlug.get(sourceSlug) : undefined;
     if (!problem) return question;
+    used.add(problem.slug);
     return {
       ...question,
       source: {
