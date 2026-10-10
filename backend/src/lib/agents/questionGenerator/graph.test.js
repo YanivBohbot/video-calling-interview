@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { MemorySaver } from "@langchain/langgraph";
-import { buildGraph, startQuestionGeneration, resumeQuestionGeneration } from "./graph.js";
+import { buildGraph, startQuestionGeneration, resumeQuestionGeneration, getCheckpointer } from "./graph.js";
 import { AIInvalidResponseError, UnknownJobError } from "./errors.js";
 
 const goodQuestions = [
@@ -17,6 +17,12 @@ const makeDeps = ({ draftQuestions = goodQuestions, update = vi.fn().mockResolve
     invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: draftQuestions } }),
   }),
   prismaClient: { interview: { update } },
+});
+
+describe("checkpointer", () => {
+  it("keeps its tables out of the Prisma-managed public schema", () => {
+    expect(getCheckpointer().options.schema).toBe("langgraph");
+  });
 });
 
 describe("question generator graph", () => {

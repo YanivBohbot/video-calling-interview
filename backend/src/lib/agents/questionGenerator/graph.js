@@ -61,9 +61,13 @@ export const buildGraph = ({
     .addEdge("finalize", END)
     .compile({ checkpointer: checkpointer || new MemorySaver() });
 
+// Own schema so `prisma migrate dev` never sees these tables as drift in `public`
+// (and offers to reset the database). setup() creates the schema if missing.
 let pgCheckpointer;
 export const getCheckpointer = () => {
-  if (!pgCheckpointer) pgCheckpointer = PostgresSaver.fromConnString(process.env.DATABASE_URL);
+  if (!pgCheckpointer) {
+    pgCheckpointer = PostgresSaver.fromConnString(process.env.DATABASE_URL, { schema: "langgraph" });
+  }
   return pgCheckpointer;
 };
 
