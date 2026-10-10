@@ -52,16 +52,20 @@ export const makeResearcherNode = ({ chooseSearch, searchProblems, random = Math
     const limit = technicalCount * 3;
     // Small enough that even narrow filter sets (~30 problems) still return results.
     const offset = Math.floor(random() * 21);
+    // Each step is broader; results accumulate until there's one problem per technical
+    // question, because narrow filters can match only one or two problems.
     const attempts = [
       { ...query, offset },
       { ...query, offset: 0 },
-      { category: query.category, difficulty: query.difficulty, offset: 0 },
+      { category: query.category, difficulty: query.difficulty, offset },
+      { category: "algorithms", difficulty: query.difficulty, offset },
     ];
+    let found = [];
     for (const params of attempts) {
-      const found = dedupeBySlug(await searchProblems({ ...params, limit }));
-      if (found.length) return { research: sample(found, technicalCount, random) };
+      found = dedupeBySlug([...found, ...(await searchProblems({ ...params, limit }))]);
+      if (found.length >= technicalCount) break;
     }
-    return { research: [] };
+    return { research: sample(found, technicalCount, random) };
   } catch (err) {
     console.warn("question generator: researcher failed, continuing without grounding:", err.message);
     return { research: [] };

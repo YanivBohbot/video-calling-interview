@@ -85,11 +85,36 @@ describe("researcher node", () => {
     const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems, random: () => 0.5 });
     const { research } = await node(state(2));
     expect(research).toHaveLength(2);
+    // Only the exact-filter retry resets to offset 0; broader searches keep the random
+    // offset so they don't return the same problems every run.
     expect(searchProblems.mock.calls.map(([p]) => p)).toEqual([
       { ...query, offset: 10, limit: 6 },
       { ...query, offset: 0, limit: 6 },
-      { category: "database", difficulty: "MEDIUM", offset: 0, limit: 6 },
+      { category: "database", difficulty: "MEDIUM", offset: 10, limit: 6 },
     ]);
+  });
+
+  // Live QA: Senior Backend filters (algorithms + design + hash-table, HARD) matched
+  // a single problem, so every run got 1 source for 4 technical questions.
+  it("keeps broadening and accumulating until it has enough distinct problems", async () => {
+    const searchProblems = vi
+      .fn()
+      .mockResolvedValueOnce(problems(1, "narrow"))
+      .mockResolvedValueOnce(problems(1, "narrow"))
+      .mockResolvedValueOnce(problems(2, "broad"))
+      .mockResolvedValue(problems(5, "general"));
+    const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems, random: () => 0 });
+    const { research } = await node(state(4));
+    expect(research).toHaveLength(4);
+    expect(new Set(research.map((p) => p.slug)).size).toBe(4);
+    expect(searchProblems.mock.calls.at(-1)[0]).toEqual({ category: "algorithms", difficulty: "MEDIUM", offset: 0, limit: 12 });
+  });
+
+  it("stops searching once the first search already has enough", async () => {
+    const searchProblems = vi.fn().mockResolvedValue(problems(9));
+    const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems });
+    await node(state(3));
+    expect(searchProblems).toHaveBeenCalledTimes(1);
   });
 
   it("returns no research when every search is empty", async () => {
