@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { Command } from "@langchain/langgraph";
+import { ToolMessage } from "@langchain/core/messages";
 import {
   distributeCounts,
   makePlannerNode,
@@ -42,18 +43,47 @@ describe("researcher node", () => {
     expect(buildResearcherAgent).not.toHaveBeenCalled();
   });
 
-  it("returns the agent's notes when it used LeetCode", async () => {
-    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { usedLeetCode: true, notes: "Grounded in Two Sum" } }) };
-    const node = makeResearcherNode({ buildResearcherAgent: async () => agent });
-    const result = await node({ plan: { categoryCounts: { technical: 4 } }, role: "Backend Engineer", interviewType: "technical" });
-    expect(result).toEqual({ research: ["Grounded in Two Sum"] });
+  const toolResult = new ToolMessage({
+    content: JSON.stringify({
+      problems: {
+        questions: [
+          { title: "Second Highest Salary", titleSlug: "second-highest-salary", difficulty: "Medium" },
+          { title: "Rank Scores", titleSlug: "rank-scores", difficulty: "Medium" },
+        ],
+      },
+    }),
+    tool_call_id: "call-1",
+    name: "search_problems",
   });
 
-  it("returns no research when the agent chose not to use LeetCode", async () => {
-    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { usedLeetCode: false, notes: "" } }) };
+  it("keeps only tool-returned, distinct problems, capped at the technical question count", async () => {
+    const agent = {
+      invoke: vi.fn().mockResolvedValue({
+        structuredResponse: {
+          problems: [{ slug: "ghost" }, { slug: "rank-scores" }, { slug: "rank-scores" }, { slug: "second-highest-salary" }],
+        },
+        messages: [toolResult],
+      }),
+    };
+    const node = makeResearcherNode({ buildResearcherAgent: async () => agent, random: () => 0 });
+    const result = await node({ plan: { categoryCounts: { technical: 1 } }, role: "Senior Backend Engineer", interviewType: "technical" });
+    expect(result).toEqual({ research: [{ slug: "rank-scores", title: "Rank Scores", difficulty: "Medium" }] });
+  });
+
+  it("tells the agent how many problems it needs and a varied search offset", async () => {
+    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [] }) };
+    const node = makeResearcherNode({ buildResearcherAgent: async () => agent, random: () => 0.5 });
+    await node({ plan: { categoryCounts: { technical: 3 } }, role: "Junior Frontend Engineer", interviewType: "technical" });
+    const content = agent.invoke.mock.calls[0][0].messages[0].content;
+    expect(content).toContain("Junior Frontend Engineer");
+    expect(content).toContain("Technical questions to ground: 3");
+    expect(content).toContain("offset 20");
+  });
+
+  it("returns no research when the agent picked nothing", async () => {
+    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [toolResult] }) };
     const node = makeResearcherNode({ buildResearcherAgent: async () => agent });
-    const result = await node({ plan: { categoryCounts: { technical: 4 } }, role: "x", interviewType: "technical" });
-    expect(result).toEqual({ research: [] });
+    expect(await node({ plan: { categoryCounts: { technical: 2 } }, role: "x", interviewType: "technical" })).toEqual({ research: [] });
   });
 
   it("does not throw when the LeetCode MCP connection is unavailable (agent builder rejects)", async () => {
@@ -99,14 +129,14 @@ describe("drafter node", () => {
     const node = makeDrafterNode({ buildDrafterAgent: async () => agent });
     await node({
       plan: { categoryCounts: { technical: 1 } },
-      research: ["Grounded in Two Sum"],
+      research: [{ slug: "two-sum", title: "Two Sum", difficulty: "Easy" }],
       useFallbackModel: false,
       count: 1,
       role: "x",
       interviewType: "technical",
     });
     const content = agent.invoke.mock.calls[0][0].messages[0].content;
-    expect(content).toContain("Grounded in Two Sum");
+    expect(content).toContain("two-sum — Two Sum (Easy)");
     expect(content).toContain("Generate exactly 1");
     expect(content).not.toContain("rejected");
   });

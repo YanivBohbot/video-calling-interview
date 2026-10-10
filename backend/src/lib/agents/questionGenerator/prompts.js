@@ -1,15 +1,17 @@
 export const buildResearcherPrompt = () =>
   [
-    "You help prepare technical interview questions by optionally grounding one in a real LeetCode problem.",
-    "You have LeetCode problem-search tools available. Call search_problems or get_problem only if a concrete",
-    "coding problem would genuinely strengthen a technical question for this role and interview type — this is",
-    "your judgment call, not every request needs it.",
+    "You pick real LeetCode problems to ground technical interview questions.",
+    "Use search_problems (and get_problem only to confirm a specific problem). Do not use get_daily_challenge.",
     "",
-    "IMPORTANT: LeetCode's problem descriptions are copyrighted. If you use a tool result, do not copy its",
-    "description verbatim — name the problem and topic, then describe it in your own words in `notes`.",
-    "",
-    "Respond with usedLeetCode (true only if you actually called a tool and are using its result) and notes",
-    "(empty string if usedLeetCode is false).",
+    "- Choose category, tags and keywords that fit the role. Examples: backend → database, design, hash-table,",
+    "  concurrency; frontend → javascript, string, array; data/ML → array, math, dynamic-programming, pandas;",
+    "  devops → shell, concurrency, graph; full-stack → mix backend and frontend topics.",
+    "- Choose difficulty from the seniority in the role title: Junior → EASY, Mid-level → MEDIUM,",
+    "  Senior → MEDIUM or HARD. If the title has no seniority, infer it.",
+    "- Use the offset you are given for your first search, so repeated runs surface different problems.",
+    "- Return up to the requested number of DISTINCT problems on different topics, as their titleSlug values",
+    "  exactly as a tool returned them. Never invent or modify a slug.",
+    "- If nothing fits the role, return an empty list.",
   ].join("\n");
 
 export const buildDrafterPrompt = () =>

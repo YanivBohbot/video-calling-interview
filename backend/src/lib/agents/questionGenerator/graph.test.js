@@ -18,7 +18,7 @@ const goodQuestions = [
 const makeDeps = ({ draftQuestions = goodQuestions, update = vi.fn().mockResolvedValue({}) } = {}) => ({
   checkpointer: new MemorySaver(),
   buildResearcherAgent: async () => ({
-    invoke: vi.fn().mockResolvedValue({ structuredResponse: { usedLeetCode: false, notes: "" } }),
+    invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [] }),
   }),
   buildDrafterAgent: async () => ({
     invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: draftQuestions } }),

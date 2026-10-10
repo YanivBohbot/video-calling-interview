@@ -1,5 +1,6 @@
 import { Command, END, interrupt } from "@langchain/langgraph";
 import { AIInvalidResponseError } from "./errors.js";
+import { collectSeenProblems, pickResearchProblems } from "./sources.js";
 
 // Largest-remainder apportionment: floors each share, then hands the leftover
 // slots to the largest fractional parts so the result always sums to `count`.
@@ -30,20 +31,35 @@ export const makePlannerNode = () => async (state) => {
 
 // Grounding is optional: an unreachable LeetCode MCP server must degrade to no
 // research, never fail the whole generation.
-export const makeResearcherNode = ({ buildResearcherAgent }) => async (state) => {
-  if (!state.plan.categoryCounts.technical) return { research: [] };
+export const makeResearcherNode = ({ buildResearcherAgent, random = Math.random }) => async (state) => {
+  const technicalCount = state.plan.categoryCounts.technical || 0;
+  if (!technicalCount) return { research: [] };
   try {
     const agent = await buildResearcherAgent();
+    const offset = Math.floor(random() * 41);
     const result = await agent.invoke({
-      messages: [{ role: "user", content: `Role: ${state.role}\nInterview type: ${state.interviewType}` }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            `Role: ${state.role}`,
+            `Interview type: ${state.interviewType}`,
+            `Technical questions to ground: ${technicalCount}`,
+            `Start your first search at offset ${offset} so repeated runs surface different problems.`,
+          ].join("\n"),
+        },
+      ],
     });
-    const { usedLeetCode, notes } = result.structuredResponse;
-    return { research: usedLeetCode ? [notes] : [] };
+    const seen = collectSeenProblems(result.messages);
+    return { research: pickResearchProblems(result.structuredResponse?.problems, seen, technicalCount) };
   } catch (err) {
     console.warn("question generator: researcher failed, continuing without grounding:", err.message);
     return { research: [] };
   }
 };
+
+const formatResearch = (research) =>
+  research.length ? research.map((p) => `- ${p.slug} — ${p.title} (${p.difficulty})`).join("\n") : "none";
 
 export const makeDrafterNode = ({ buildDrafterAgent }) => async (state) => {
   const agent = await buildDrafterAgent(state.useFallbackModel);
@@ -57,7 +73,7 @@ export const makeDrafterNode = ({ buildDrafterAgent }) => async (state) => {
             `Role: ${state.role}`,
             `Interview type: ${state.interviewType}`,
             `Category mix: ${JSON.stringify(state.plan.categoryCounts)}`,
-            `Research notes: ${state.research.length ? state.research.join(" ") : "none"}`,
+            `LeetCode problems you may use (one per technical question):\n${formatResearch(state.research)}`,
             ...(state.validationErrors?.length
               ? [`Your previous draft was rejected: ${state.validationErrors.join("; ")}. Fix these.`]
               : []),

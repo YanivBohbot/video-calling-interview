@@ -26,9 +26,9 @@ export const DraftResponseSchema = z.object({
   questions: z.array(QuestionSchema),
 });
 
+// The model names slugs only; facts come from the tool results (see sources.js).
 export const ResearchResponseSchema = z.object({
-  usedLeetCode: z.boolean(),
-  notes: z.string(),
+  problems: z.array(z.object({ slug: z.string() })),
 });
 
 export const QuestionGenState = new StateSchema({
@@ -37,7 +37,7 @@ export const QuestionGenState = new StateSchema({
   interviewType: z.string(),
   count: z.number(),
   plan: z.object({ categoryCounts: z.record(z.number()) }).nullable().default(null),
-  research: z.array(z.string()).default(() => []),
+  research: z.array(ResearchProblemSchema).default(() => []),
   draftQuestions: z.array(QuestionSchema).default(() => []),
   validationErrors: z.array(z.string()).default(() => []),
   retryCount: z.number().default(0),

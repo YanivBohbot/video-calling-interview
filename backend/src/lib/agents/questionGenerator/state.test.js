@@ -21,12 +21,9 @@ describe("question generator schemas", () => {
     ).toEqual({ questions: [{ text: "x", category: "technical", difficulty: "easy" }] });
   });
 
-  it("ResearchResponseSchema requires usedLeetCode and notes", () => {
-    expect(ResearchResponseSchema.parse({ usedLeetCode: true, notes: "n" })).toEqual({
-      usedLeetCode: true,
-      notes: "n",
-    });
-    expect(() => ResearchResponseSchema.parse({ usedLeetCode: true })).toThrow();
+  it("ResearchResponseSchema is a list of chosen slugs", () => {
+    expect(ResearchResponseSchema.parse({ problems: [{ slug: "two-sum" }] })).toEqual({ problems: [{ slug: "two-sum" }] });
+    expect(() => ResearchResponseSchema.parse({ usedLeetCode: true, notes: "n" })).toThrow();
   });
 
   it("QuestionGenState fields default correctly when run through a graph", async () => {
