@@ -57,6 +57,9 @@ export const makeDrafterNode = ({ buildDrafterAgent }) => async (state) => {
             `Interview type: ${state.interviewType}`,
             `Category mix: ${JSON.stringify(state.plan.categoryCounts)}`,
             `Research notes: ${state.research.length ? state.research.join(" ") : "none"}`,
+            ...(state.validationErrors?.length
+              ? [`Your previous draft was rejected: ${state.validationErrors.join("; ")}. Fix these.`]
+              : []),
           ].join("\n"),
         },
       ],

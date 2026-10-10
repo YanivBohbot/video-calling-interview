@@ -98,6 +98,24 @@ describe("drafter node", () => {
     const content = agent.invoke.mock.calls[0][0].messages[0].content;
     expect(content).toContain("Grounded in Two Sum");
     expect(content).toContain("Generate exactly 1");
+    expect(content).not.toContain("rejected");
+  });
+
+  it("tells the model what was wrong with its previous draft on a retry", async () => {
+    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: sampleQuestions } }) };
+    const node = makeDrafterNode({ buildDrafterAgent: async () => agent });
+    await node({
+      plan: { categoryCounts: { technical: 1 } },
+      research: [],
+      useFallbackModel: false,
+      count: 1,
+      role: "x",
+      interviewType: "technical",
+      validationErrors: ['duplicate question: "Explain closures"'],
+    });
+    const content = agent.invoke.mock.calls[0][0].messages[0].content;
+    expect(content).toContain("Your previous draft was rejected");
+    expect(content).toContain('duplicate question: "Explain closures"');
   });
 });
 
