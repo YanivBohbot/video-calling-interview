@@ -36,7 +36,8 @@ export const makeResearcherNode = ({ buildResearcherAgent, random = Math.random 
   if (!technicalCount) return { research: [] };
   try {
     const agent = await buildResearcherAgent();
-    const offset = Math.floor(random() * 41);
+    // Small enough that even narrow filter sets (~30 problems) still return results.
+    const offset = Math.floor(random() * 21);
     const result = await agent.invoke({
       messages: [
         {

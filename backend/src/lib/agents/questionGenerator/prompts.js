@@ -9,6 +9,8 @@ export const buildResearcherPrompt = () =>
     "- Choose difficulty from the seniority in the role title: Junior → EASY, Mid-level → MEDIUM,",
     "  Senior → MEDIUM or HARD. If the title has no seniority, infer it.",
     "- Use the offset you are given for your first search, so repeated runs surface different problems.",
+    "- If a search returns no problems, retry once with offset 0 and broader filters (fewer tags) — don't",
+    "  keep paging an empty result.",
     "- Make at most 3 tool calls in total, then answer with what you found.",
     "- Return up to the requested number of DISTINCT problems on different topics, as their titleSlug values",
     "  exactly as a tool returned them. Never invent or modify a slug.",

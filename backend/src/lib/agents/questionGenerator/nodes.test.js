@@ -77,7 +77,16 @@ describe("researcher node", () => {
     const content = agent.invoke.mock.calls[0][0].messages[0].content;
     expect(content).toContain("Junior Frontend Engineer");
     expect(content).toContain("Technical questions to ground: 3");
-    expect(content).toContain("offset 20");
+    expect(content).toContain("offset 10");
+  });
+
+  // Narrow filter combinations can be small (javascript + EASY = 30 problems), so a
+  // large offset returned nothing and sent the model into a retry loop.
+  it("keeps the search offset at or below 20", async () => {
+    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [] }) };
+    const node = makeResearcherNode({ buildResearcherAgent: async () => agent, random: () => 0.999 });
+    await node({ plan: { categoryCounts: { technical: 2 } }, role: "x", interviewType: "technical" });
+    expect(agent.invoke.mock.calls[0][0].messages[0].content).toContain("offset 20");
   });
 
   it("bounds the agent's tool loop so a wandering search can't take a minute", async () => {
