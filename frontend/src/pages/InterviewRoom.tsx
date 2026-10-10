@@ -9,7 +9,7 @@ import {
 } from '@stream-io/video-react-sdk';
 import { useUser } from '@clerk/clerk-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, Code, PenTool, FileText, Loader2, Save, Sparkles } from 'lucide-react';
+import { Video, Code, PenTool, FileText, Loader2, Save, Sparkles, ExternalLink } from 'lucide-react';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 
 const apiKey = import.meta.env.VITE_STREAM_API_KEY;
@@ -17,10 +17,19 @@ const apiKey = import.meta.env.VITE_STREAM_API_KEY;
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import Whiteboard from '../components/Whiteboard';
 
+type QuestionSource = {
+  type: 'leetcode';
+  title: string;
+  slug: string;
+  difficulty: string;
+  url: string;
+};
+
 type Question = {
   text: string;
   category: 'technical' | 'behavioral' | 'system-design';
   difficulty: 'easy' | 'medium' | 'hard';
+  source?: QuestionSource;
 };
 
 const ReportModal: React.FC<{
@@ -218,6 +227,17 @@ const QuestionsPanel: React.FC<{
       <div className="space-y-3">
         {questions.map((q, i) => (
           <div key={i} className="bg-slate-800/60 border border-white/5 rounded-xl p-3 flex flex-col gap-2">
+            {q.source && (
+              <a
+                href={q.source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="self-start inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300 hover:bg-amber-500/20"
+              >
+                <ExternalLink size={11} />
+                LeetCode · {q.source.title} · {q.source.difficulty}
+              </a>
+            )}
             <textarea
               value={q.text}
               onChange={(e) => updateRow(i, { text: e.target.value })}
