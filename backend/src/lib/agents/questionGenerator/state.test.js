@@ -14,11 +14,11 @@ describe("question generator schemas", () => {
     ).toThrow();
   });
 
-  it("DraftResponseSchema requires a questions array", () => {
+  it("DraftResponseSchema requires sourceSlug (string or null) on every question", () => {
+    const ok = { questions: [{ text: "x", category: "technical", difficulty: "easy", sourceSlug: null }] };
+    expect(DraftResponseSchema.parse(ok)).toEqual(ok);
+    expect(() => DraftResponseSchema.parse({ questions: [{ text: "x", category: "technical", difficulty: "easy" }] })).toThrow();
     expect(() => DraftResponseSchema.parse({ questions: "not an array" })).toThrow();
-    expect(
-      DraftResponseSchema.parse({ questions: [{ text: "x", category: "technical", difficulty: "easy" }] }),
-    ).toEqual({ questions: [{ text: "x", category: "technical", difficulty: "easy" }] });
   });
 
   it("ResearchResponseSchema is a list of chosen slugs", () => {

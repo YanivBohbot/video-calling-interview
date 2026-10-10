@@ -22,8 +22,18 @@ export const ResearchProblemSchema = z.object({
   difficulty: z.string(),
 });
 
+// What the drafter model returns: it only names a slug, and code builds the source.
+// sourceSlug is nullable rather than optional because OpenAI strict mode requires
+// every property to be present.
+export const DraftQuestionSchema = z.object({
+  text: z.string(),
+  category: z.enum(["technical", "behavioral", "system-design"]),
+  difficulty: z.enum(["easy", "medium", "hard"]),
+  sourceSlug: z.string().nullable(),
+});
+
 export const DraftResponseSchema = z.object({
-  questions: z.array(QuestionSchema),
+  questions: z.array(DraftQuestionSchema),
 });
 
 // The model names slugs only; facts come from the tool results (see sources.js).

@@ -141,6 +141,37 @@ describe("drafter node", () => {
     expect(content).not.toContain("rejected");
   });
 
+  it("turns the model's sourceSlug into a verified source on technical questions only", async () => {
+    const agent = {
+      invoke: vi.fn().mockResolvedValue({
+        structuredResponse: {
+          questions: [
+            { text: "Rank players by score", category: "technical", difficulty: "medium", sourceSlug: "rank-scores" },
+            { text: "Tell me about a conflict", category: "behavioral", difficulty: "easy", sourceSlug: "rank-scores" },
+          ],
+        },
+      }),
+    };
+    const node = makeDrafterNode({ buildDrafterAgent: async () => agent });
+    const { draftQuestions } = await node({
+      plan: { categoryCounts: { technical: 1, behavioral: 1 } },
+      research: [{ slug: "rank-scores", title: "Rank Scores", difficulty: "Medium" }],
+      useFallbackModel: false,
+      count: 2,
+      role: "x",
+      interviewType: "technical",
+    });
+    expect(draftQuestions[0].source).toEqual({
+      type: "leetcode",
+      title: "Rank Scores",
+      slug: "rank-scores",
+      difficulty: "Medium",
+      url: "https://leetcode.com/problems/rank-scores/",
+    });
+    expect(draftQuestions[1].source).toBeUndefined();
+    expect("sourceSlug" in draftQuestions[0]).toBe(false);
+  });
+
   it("tells the model what was wrong with its previous draft on a retry", async () => {
     const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: sampleQuestions } }) };
     const node = makeDrafterNode({ buildDrafterAgent: async () => agent });
@@ -189,6 +220,21 @@ describe("validator node", () => {
     await expect(
       validatorNode({ draftQuestions: [], count: 2, retryCount: 3, useFallbackModel: true }),
     ).rejects.toBeInstanceOf(AIInvalidResponseError);
+  });
+
+  it("rejects two questions built on the same LeetCode problem", async () => {
+    const source = { type: "leetcode", title: "Rank Scores", slug: "rank-scores", difficulty: "Medium", url: "https://leetcode.com/problems/rank-scores/" };
+    const result = await validatorNode({
+      draftQuestions: [
+        { text: "Q one", category: "technical", difficulty: "medium", source },
+        { text: "Q two", category: "technical", difficulty: "medium", source },
+      ],
+      count: 2,
+      retryCount: 0,
+      useFallbackModel: false,
+    });
+    expect(result.goto).toEqual(["drafter"]);
+    expect(result.update.validationErrors.some((e) => e.includes("rank-scores"))).toBe(true);
   });
 
   it("catches a wrong question count", async () => {

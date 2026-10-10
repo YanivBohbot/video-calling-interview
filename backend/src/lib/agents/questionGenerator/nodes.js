@@ -1,6 +1,6 @@
 import { Command, END, interrupt } from "@langchain/langgraph";
 import { AIInvalidResponseError } from "./errors.js";
-import { collectSeenProblems, pickResearchProblems } from "./sources.js";
+import { collectSeenProblems, pickResearchProblems, attachSources } from "./sources.js";
 
 // Largest-remainder apportionment: floors each share, then hands the leftover
 // slots to the largest fractional parts so the result always sums to `count`.
@@ -83,7 +83,7 @@ export const makeDrafterNode = ({ buildDrafterAgent }) => async (state) => {
     },
     { recursionLimit: 10 },
   );
-  return { draftQuestions: result.structuredResponse.questions };
+  return { draftQuestions: attachSources(result.structuredResponse.questions, state.research) };
 };
 
 const MAX_CONTENT_RETRIES = 2;
@@ -99,6 +99,12 @@ const validateContent = (state) => {
     const key = q.text.trim().toLowerCase();
     if (seen.has(key)) errors.push(`duplicate question: "${q.text}"`);
     seen.add(key);
+  }
+  const usedSources = new Set();
+  for (const q of state.draftQuestions) {
+    if (!q.source) continue;
+    if (usedSources.has(q.source.slug)) errors.push(`two questions use the same LeetCode problem: ${q.source.slug}`);
+    usedSources.add(q.source.slug);
   }
   return errors;
 };
