@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Save, Sparkles, ExternalLink } from 'lucide-react';
+import { Loader2, Save, Sparkles, ExternalLink, CheckCircle2 } from 'lucide-react';
 import type { Question } from '../lib/questions';
 
 const API = 'http://localhost:3001/api';
@@ -22,10 +22,13 @@ const QuestionsPanel: React.FC<{
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Without this, a successful save only flipped the button label and looked like nothing happened.
+  const [savedCount, setSavedCount] = React.useState<number | null>(null);
 
   const generate = async () => {
     setLoading(true);
     setError(null);
+    setSavedCount(null);
     try {
       const r = await fetch(`${API}/interviews/${interviewId}/questions/generate`, {
         method: 'POST',
@@ -49,10 +52,15 @@ const QuestionsPanel: React.FC<{
     }
   };
 
-  const updateRow = (i: number, patch: Partial<Question>) =>
+  const updateRow = (i: number, patch: Partial<Question>) => {
+    setSavedCount(null);
     setQuestions((qs) => qs.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
+  };
 
-  const deleteRow = (i: number) => setQuestions((qs) => qs.filter((_, idx) => idx !== i));
+  const deleteRow = (i: number) => {
+    setSavedCount(null);
+    setQuestions((qs) => qs.filter((_, idx) => idx !== i));
+  };
 
   // A pending AI draft is approved/rejected through the paused graph; with no draft
   // pending, Save is a plain edit of the already-saved list.
@@ -85,6 +93,7 @@ const QuestionsPanel: React.FC<{
       setJobId(null);
       if (approved) {
         onSaved(questions);
+        setSavedCount(questions.length);
       } else {
         setQuestions(savedQuestions);
       }
@@ -115,6 +124,16 @@ const QuestionsPanel: React.FC<{
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 text-red-200 text-sm rounded-lg p-3 mb-3">
           {error}
+        </div>
+      )}
+
+      {savedCount !== null && (
+        <div
+          role="status"
+          className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 text-sm rounded-lg p-3 mb-3 flex items-center gap-2"
+        >
+          <CheckCircle2 size={16} />
+          Saved {savedCount} question{savedCount === 1 ? '' : 's'} — they'll appear in the interview room's Code Editor.
         </div>
       )}
 

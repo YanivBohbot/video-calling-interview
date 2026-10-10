@@ -9,14 +9,13 @@ import {
 } from '@stream-io/video-react-sdk';
 import { useUser } from '@clerk/clerk-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, Code, PenTool, FileText, Loader2, Save, Sparkles } from 'lucide-react';
+import { Video, Code, PenTool, FileText, Loader2, Save } from 'lucide-react';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 
 const apiKey = import.meta.env.VITE_STREAM_API_KEY;
 
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import Whiteboard from '../components/Whiteboard';
-import QuestionsPanel from '../components/QuestionsPanel';
 import type { Question } from '../lib/questions';
 
 
@@ -99,7 +98,7 @@ export const InterviewRoom: React.FC = () => {
   const navigate = useNavigate();
   const [client, setClient] = React.useState<StreamVideoClient | null>(null);
   const [call, setCall] = React.useState<any>(null);
-  const [activeTab, setActiveTab] = React.useState<'code' | 'design' | 'questions'>('code');
+  const [activeTab, setActiveTab] = React.useState<'code' | 'design'>('code');
   const [showReport, setShowReport] = React.useState(false);
   const [interviewData, setInterviewData] = React.useState<{
     codeSnapshot?: string | null;
@@ -107,15 +106,12 @@ export const InterviewRoom: React.FC = () => {
     questions?: Question[] | null;
     interviewerId?: { clerkID?: string } | null;
   } | null>(null);
-  const [questions, setQuestions] = React.useState<Question[]>([]);
-  const [pendingJobId, setPendingJobId] = React.useState<string | null>(null);
 
-  // Only the interviewer may see/generate/save questions — the room URL is also the
+  // Only the interviewer sees the question list and can Ask — the room URL is also the
   // candidate's share link. Guest mode has no identities, so a signed-out viewer counts
   // as the interviewer only for interviews owned by the shared "demo" user.
   const ownerClerkId = interviewData?.interviewerId?.clerkID;
   const isInterviewer = user?.id ? ownerClerkId === user.id : ownerClerkId === 'demo';
-  const viewerClerkId = user?.id ?? 'demo';
 
   React.useEffect(() => {
     if (!id) return;
@@ -172,7 +168,6 @@ export const InterviewRoom: React.FC = () => {
       .then((data) => {
         if (cancelled) return;
         setInterviewData(data);
-        setQuestions(data?.questions ?? []);
       })
       .catch((err) => console.error('Failed to fetch interview data:', err));
 
@@ -266,17 +261,6 @@ export const InterviewRoom: React.FC = () => {
                     <PenTool size={16} />
                     System Design
                   </button>
-                  {isInterviewer && (
-                    <button
-                      onClick={() => setActiveTab('questions')}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        activeTab === 'questions' ? 'bg-brand text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                      }`}
-                    >
-                      <Sparkles size={16} />
-                      Questions
-                    </button>
-                  )}
                 </div>
 
                 {/* Active Workspace */}
@@ -288,22 +272,9 @@ export const InterviewRoom: React.FC = () => {
                       initialLanguage={interviewData?.codeLanguage ?? undefined}
                       askableQuestions={isInterviewer ? interviewData?.questions ?? [] : undefined}
                     />
-                  ) : activeTab === 'design' ? (
+                  ) : (
                     <Whiteboard />
-                  ) : isInterviewer ? (
-                    <QuestionsPanel
-                      interviewId={id || 'default'}
-                      clerkId={viewerClerkId}
-                      questions={questions}
-                      setQuestions={setQuestions}
-                      jobId={pendingJobId}
-                      setJobId={setPendingJobId}
-                      savedQuestions={interviewData?.questions ?? []}
-                      onSaved={(saved) =>
-                        setInterviewData((prev) => (prev ? { ...prev, questions: saved } : prev))
-                      }
-                    />
-                  ) : null}
+                  )}
                 </div>
               </div>
 

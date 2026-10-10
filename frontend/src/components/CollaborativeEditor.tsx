@@ -168,7 +168,7 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {askableQuestions!.length === 0 && (
-              <p className="text-xs text-slate-500 p-2">No approved questions yet — generate them on the Questions tab.</p>
+              <p className="text-xs text-slate-500 p-2">No questions for this interview — they're generated when you schedule it.</p>
             )}
             {askableQuestions!.map((q, i) => (
               <div
