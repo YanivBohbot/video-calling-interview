@@ -15,7 +15,7 @@ User QA on the running app found three gaps:
 ## 2. Goals / Non-goals
 
 **Goals**
-- New Interview offers the 18 catalog roles in a dropdown plus "Custom…" free text.
+- New Interview offers the 18 catalog roles via two short dropdowns (Domain + Seniority) plus "Custom…" free text.
 - A question grounded in a LeetCode problem shows a badge — title, difficulty, link — in the Questions tab.
 - Each technical question uses a different problem; behavioral and system-design questions never carry a LeetCode source.
 - Research picks problems relevant to the role, and Regenerate can surface different problems.
@@ -28,8 +28,9 @@ User QA on the running app found three gaps:
 
 ## 3. Role catalog (frontend only)
 
-- New `frontend/src/lib/roleCatalog.ts`: the same 6 domains × 3 seniorities as the avatar branch → 18 titles like `"Senior Backend Engineer"`.
-- `NewInterview.tsx` role field becomes a `<select>` of the 18 titles grouped by domain, plus a final `Custom…` option that reveals the existing free-text input. Submitted value is still `role: string`. No backend change.
+- New `frontend/src/lib/roleCatalog.ts`: the same 6 domains (Backend, Frontend, Full-Stack, Data/ML, Product Manager, DevOps) and 3 seniorities (Junior, Mid-level, Senior) as the avatar branch, plus `composeRole(seniority, domain)` → e.g. `"Senior Backend Engineer"`.
+- `NewInterview.tsx` role field becomes **two short dropdowns side by side** — Domain (6 options + `Custom…`) and Seniority (3 options) — instead of one 18-item list, so nothing is too long to display. Choosing `Custom…` hides the Seniority dropdown and reveals the existing free-text input. Default: `Backend Engineer` + `Mid-level`.
+- Submitted value is still `role: string` (the composed title, or the custom text). No backend change.
 
 ## 4. Question source (backend contract + UI)
 
@@ -60,7 +61,7 @@ Stored in the existing `Interview.questions` JSON column — no migration. Old q
 **Validator** adds one rule: two questions sharing the same `source.slug` → content-invalid (retry loop, with the error fed back to the drafter as today).
 
 ## 6. Testing
-- `roleCatalog`: 18 unique titles. Frontend has no test runner → verified by `npm run build` + lint baseline + a manual check.
+- `roleCatalog`: 6 domains × 3 seniorities compose to 18 unique titles. Frontend has no test runner → verified by `npm run build` + lint baseline + a manual check.
 - `attachSources`: known slug → full source with built URL; unknown slug → dropped; slug on a behavioral/system-design question → dropped.
 - Researcher node: keeps only slugs seen in tool results; caps at `technicalCount`; de-dupes; failure → `[]`.
 - Validator: duplicate `source.slug` → retry with error.
