@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { StateGraph, START, END, MemorySaver, Command } from "@langchain/langgraph";
+import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { createAgent } from "langchain";
 import { prisma } from "../../db.js";
 import { getLeetCodeTools } from "../leetcodeMcpClient.js";
@@ -60,9 +61,17 @@ export const buildGraph = ({
     .addEdge("finalize", END)
     .compile({ checkpointer: checkpointer || new MemorySaver() });
 
+let pgCheckpointer;
+export const getCheckpointer = () => {
+  if (!pgCheckpointer) pgCheckpointer = PostgresSaver.fromConnString(process.env.DATABASE_URL);
+  return pgCheckpointer;
+};
+
+export const ensureCheckpointerTables = () => getCheckpointer().setup();
+
 let defaultGraph;
 const getDefaultGraph = () => {
-  if (!defaultGraph) defaultGraph = buildGraph();
+  if (!defaultGraph) defaultGraph = buildGraph({ checkpointer: getCheckpointer() });
   return defaultGraph;
 };
 

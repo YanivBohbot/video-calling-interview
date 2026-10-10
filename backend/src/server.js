@@ -14,6 +14,7 @@ import streamRoutes from "./routes/stream.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import sessionRoutes from "./routes/session.routes.js";
 import { getLeetCodeTools } from "./lib/agents/leetcodeMcpClient.js";
+import { ensureCheckpointerTables } from "./lib/agents/questionGenerator/graph.js";
 
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -145,6 +146,9 @@ const startServer = async () => {
     // stdio handshake happen now, not on the first user-facing generate request.
     // getLeetCodeTools never rejects; it resolves to [] on failure and retries on next call.
     getLeetCodeTools().catch(() => {});
+    // Idempotent: creates the LangGraph checkpointer's Postgres tables if missing. Best-effort —
+    // a slow DB at boot must not crash the server; generation will then fail per-request instead.
+    ensureCheckpointerTables().catch((err) => console.error("Checkpointer setup failed:", err.message));
   } catch (err) {
     console.log("Start server error:", err);
   }
