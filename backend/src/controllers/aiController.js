@@ -7,7 +7,7 @@ import {
   UnknownJobError,
 } from "../lib/agents/questionGenerator/errors.js";
 import { createRateLimiter } from "../lib/rateLimiter.js";
-import { toInterviewDoc, INTERVIEWER_SELECT } from "./controller.js";
+import { toInterviewDoc, INTERVIEWER_SELECT, validateQuestionsPayload } from "./controller.js";
 
 const DEFAULT_COUNT = Number(process.env.AI_QUESTION_COUNT || 6);
 const questionsLimiter = createRateLimiter({ max: 10, windowMs: 60 * 60 * 1000 });
@@ -54,6 +54,12 @@ export const approveQuestions = async (req, res) => {
     if (typeof jobId !== "string" || typeof approved !== "boolean") {
       return res.status(400).json({ message: "jobId (string) and approved (boolean) are required" });
     }
+    // Validate before resuming: a payload rejected inside the graph would error the
+    // paused thread and make the draft permanently un-approvable.
+    if (approved && questions !== undefined) {
+      const payloadError = validateQuestionsPayload(questions);
+      if (payloadError) return res.status(400).json({ message: payloadError });
+    }
     // The thread is always addressed as `${req.params.id}:${jobId}`, so a jobId
     // minted for another interview resolves to a thread that doesn't exist and
     // surfaces as UnknownJobError (404) — it can never touch that other interview.
@@ -61,7 +67,7 @@ export const approveQuestions = async (req, res) => {
       interviewId: req.params.id,
       jobId,
       approved,
-      questions,
+      questions: approved ? questions : undefined,
     });
 
     if (!result.approved) return res.status(200).json({ status: "rejected" });

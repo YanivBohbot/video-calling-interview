@@ -104,6 +104,29 @@ describe("approveQuestions controller", () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
+  it.each([
+    ["an empty-text row", [{ text: "", category: "technical", difficulty: "easy" }]],
+    ["a bogus category", [{ text: "Q", category: "nope", difficulty: "easy" }]],
+    ["a non-array", "not-an-array"],
+    ["null", null],
+  ])("returns 400 for %s and leaves the draft pending (never resumes)", async (_label, questions) => {
+    const res = mockRes();
+    await approveQuestions({ ...baseReq, params: { id: "iv-1" }, body: { jobId: "j", approved: true, questions } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(resumeQuestionGeneration).not.toHaveBeenCalled();
+  });
+
+  it("does not validate questions on reject (they are ignored)", async () => {
+    resumeQuestionGeneration.mockResolvedValue({ approved: false });
+    const res = mockRes();
+    await approveQuestions(
+      { ...baseReq, params: { id: "iv-1" }, body: { jobId: "j", approved: false, questions: "junk" } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(resumeQuestionGeneration).toHaveBeenCalledWith(expect.objectContaining({ questions: undefined }));
+  });
+
   it("scopes the resume to the interview in the URL, never one named in the body", async () => {
     resumeQuestionGeneration.mockResolvedValue({ approved: false });
     const res = mockRes();

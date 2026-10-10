@@ -174,7 +174,7 @@ export const deleteInterview = async (req, res) => {
 const ALLOWED_QUESTION_CATEGORY = new Set(["technical", "behavioral", "system-design"]);
 const ALLOWED_QUESTION_DIFFICULTY = new Set(["easy", "medium", "hard"]);
 
-const validateQuestionsPayload = (questions) => {
+export const validateQuestionsPayload = (questions) => {
   if (!Array.isArray(questions)) return "questions must be an array";
   for (const q of questions) {
     if (typeof q?.text !== "string" || !q.text.trim()) return "each question needs non-empty text";
