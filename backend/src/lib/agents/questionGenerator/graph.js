@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { StateGraph, START, END, MemorySaver, Command } from "@langchain/langgraph";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import { createAgent } from "langchain";
+import { createAgent, toolStrategy } from "langchain";
 import { prisma } from "../../db.js";
 import { getLeetCodeTools } from "../leetcodeMcpClient.js";
 import { QuestionGenState, DraftResponseSchema, ResearchResponseSchema } from "./state.js";
@@ -17,15 +17,17 @@ import {
 } from "./nodes.js";
 import { AIProviderError, AIInvalidResponseError, UnknownJobError } from "./errors.js";
 
-const defaultBuildResearcherAgent = async () => {
-  const tools = await getLeetCodeTools();
-  return createAgent({
-    model: `openai:${process.env.AI_MODEL || "gpt-4o-mini"}`,
-    tools,
-    systemPrompt: buildResearcherPrompt(),
-    responseFormat: ResearchResponseSchema,
-  });
-};
+// toolStrategy, not the provider-native json_schema format: OpenAI's native mode
+// forces strict:true on every bound tool, and the LeetCode MCP schemas aren't
+// strict-compatible, so every research call failed with a 400.
+export const researcherAgentOptions = (tools) => ({
+  model: `openai:${process.env.AI_MODEL || "gpt-4o-mini"}`,
+  tools,
+  systemPrompt: buildResearcherPrompt(),
+  responseFormat: toolStrategy(ResearchResponseSchema),
+});
+
+const defaultBuildResearcherAgent = async () => createAgent(researcherAgentOptions(await getLeetCodeTools()));
 
 const defaultBuildDrafterAgent = async (useFallbackModel) =>
   createAgent({

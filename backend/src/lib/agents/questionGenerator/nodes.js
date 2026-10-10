@@ -39,7 +39,8 @@ export const makeResearcherNode = ({ buildResearcherAgent }) => async (state) =>
     });
     const { usedLeetCode, notes } = result.structuredResponse;
     return { research: usedLeetCode ? [notes] : [] };
-  } catch {
+  } catch (err) {
+    console.warn("question generator: researcher failed, continuing without grounding:", err.message);
     return { research: [] };
   }
 };

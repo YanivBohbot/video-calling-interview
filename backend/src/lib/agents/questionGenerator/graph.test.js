@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { MemorySaver } from "@langchain/langgraph";
-import { buildGraph, startQuestionGeneration, resumeQuestionGeneration, getCheckpointer } from "./graph.js";
+import { ToolStrategy } from "langchain";
+import {
+  buildGraph,
+  startQuestionGeneration,
+  resumeQuestionGeneration,
+  getCheckpointer,
+  researcherAgentOptions,
+} from "./graph.js";
 import { AIInvalidResponseError, UnknownJobError } from "./errors.js";
 
 const goodQuestions = [
@@ -17,6 +24,17 @@ const makeDeps = ({ draftQuestions = goodQuestions, update = vi.fn().mockResolve
     invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: draftQuestions } }),
   }),
   prismaClient: { interview: { update } },
+});
+
+describe("researcher agent options", () => {
+  // OpenAI's native json_schema mode forces strict:true on every bound tool, and the
+  // LeetCode MCP tool schemas aren't strict-compatible (400 on every call). A tool
+  // strategy keeps structured output without forcing strict on the MCP tools.
+  it("uses a tool strategy for structured output, not the provider-native one", () => {
+    const { responseFormat } = researcherAgentOptions([]);
+    expect(Array.isArray(responseFormat) && responseFormat.length).toBeTruthy();
+    for (const strategy of responseFormat) expect(strategy).toBeInstanceOf(ToolStrategy);
+  });
 });
 
 describe("checkpointer", () => {

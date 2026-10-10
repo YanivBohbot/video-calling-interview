@@ -62,6 +62,16 @@ describe("researcher node", () => {
       node({ plan: { categoryCounts: { technical: 4 } }, role: "x", interviewType: "technical" }),
     ).resolves.toEqual({ research: [] });
   });
+
+  it("logs the error when it degrades, so a persistent failure is visible", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const node = makeResearcherNode({
+      buildResearcherAgent: async () => ({ invoke: vi.fn().mockRejectedValue(new Error("400 Invalid schema")) }),
+    });
+    await node({ plan: { categoryCounts: { technical: 4 } }, role: "x", interviewType: "technical" });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("researcher"), "400 Invalid schema");
+    warn.mockRestore();
+  });
 });
 
 describe("drafter node", () => {
