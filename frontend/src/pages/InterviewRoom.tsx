@@ -104,15 +104,17 @@ const QuestionsPanel: React.FC<{
   clerkId: string;
   questions: Question[];
   setQuestions: React.Dispatch<React.SetStateAction<Question[]>>;
+  // Set while an AI draft is paused on the backend awaiting approval; null when the
+  // panel is just editing already-saved questions. Owned by InterviewRoom so a tab
+  // switch (which unmounts this panel) can't silently drop the pending approval.
+  jobId: string | null;
+  setJobId: (jobId: string | null) => void;
+  savedQuestions: Question[];
   onSaved: (saved: Question[]) => void;
-}> = ({ interviewId, clerkId, questions, setQuestions, onSaved }) => {
+}> = ({ interviewId, clerkId, questions, setQuestions, jobId, setJobId, savedQuestions, onSaved }) => {
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  // Set while an AI draft is paused on the backend awaiting approval; null when the
-  // panel is just editing already-saved questions.
-  const [jobId, setJobId] = React.useState<string | null>(null);
-  const savedBeforeDraft = React.useRef<Question[]>([]);
 
   const generate = async () => {
     setLoading(true);
@@ -131,7 +133,6 @@ const QuestionsPanel: React.FC<{
         );
         return;
       }
-      if (!jobId) savedBeforeDraft.current = questions;
       setJobId(body.jobId);
       setQuestions(body.draftQuestions);
     } catch (e: any) {
@@ -167,7 +168,7 @@ const QuestionsPanel: React.FC<{
         const body = await r.json().catch(() => ({}));
         if (r.status === 404 && jobId) {
           setJobId(null);
-          setQuestions(savedBeforeDraft.current);
+          setQuestions(savedQuestions);
           setError('This draft expired — generate a new one.');
         } else {
           setError(body?.message || 'Failed to save questions');
@@ -178,7 +179,7 @@ const QuestionsPanel: React.FC<{
       if (approved) {
         onSaved(questions);
       } else {
-        setQuestions(savedBeforeDraft.current);
+        setQuestions(savedQuestions);
       }
     } catch (e: any) {
       setError(e?.message || 'Network error');
@@ -290,6 +291,7 @@ export const InterviewRoom: React.FC = () => {
     interviewerId?: { clerkID?: string } | null;
   } | null>(null);
   const [questions, setQuestions] = React.useState<Question[]>([]);
+  const [pendingJobId, setPendingJobId] = React.useState<string | null>(null);
 
   // Only the interviewer may see/generate/save questions — the room URL is also the
   // candidate's share link. Guest/demo mode has no Clerk user, so the tab stays hidden
@@ -474,6 +476,9 @@ export const InterviewRoom: React.FC = () => {
                       clerkId={user.id}
                       questions={questions}
                       setQuestions={setQuestions}
+                      jobId={pendingJobId}
+                      setJobId={setPendingJobId}
+                      savedQuestions={interviewData?.questions ?? []}
                       onSaved={(saved) =>
                         setInterviewData((prev) => (prev ? { ...prev, questions: saved } : prev))
                       }
