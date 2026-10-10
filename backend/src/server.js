@@ -9,6 +9,12 @@ import {
   flushAllDirty,
   flushRoomOnExit,
 } from "./lib/roomState.js";
+import {
+  sanitizeAskedQuestion,
+  setCurrentQuestion,
+  getCurrentQuestion,
+  clearCurrentQuestion,
+} from "./lib/roomQuestions.js";
 import interviewRoutes from "./routes/interview.routes.js";
 import streamRoutes from "./routes/stream.routes.js";
 import userRoutes from "./routes/user.routes.js";
@@ -32,6 +38,9 @@ const io = new Server(httpServer, {
 });
 
 const roomState = new Map();
+// Kept apart from roomState: creating a roomState entry would make rejoiners receive
+// empty code instead of the persisted snapshot.
+const roomQuestions = new Map();
 const FLUSH_INTERVAL_MS = 10_000;
 
 let isFlushing = false;
@@ -56,6 +65,10 @@ io.on("connection", (socket) => {
     socket.join(roomId);
     socket.data.roomId = roomId;
     console.log(`User ${socket.id} joined room: ${roomId}`);
+
+    // Replay the current question first: the code-snapshot branch below may return early.
+    const current = getCurrentQuestion(roomQuestions, roomId);
+    if (current) socket.emit("question-update", current);
 
     // Send the room's current state back to *this* socket only, so a (re)joining
     // client is seeded from the server rather than from a stale page-load snapshot.
@@ -94,6 +107,14 @@ io.on("connection", (socket) => {
     applyLanguageChange(roomState, roomId, language);
   });
 
+  socket.on("question-change", ({ roomId, question } = {}) => {
+    if (!socket.rooms.has(roomId)) return;
+    const clean = sanitizeAskedQuestion(question);
+    if (!clean) return;
+    setCurrentQuestion(roomQuestions, roomId, clean);
+    io.to(roomId).emit("question-update", clean);
+  });
+
   socket.on("code-execution", ({ roomId, result }) => {
     socket.to(roomId).emit("execution-result", result);
   });
@@ -104,6 +125,7 @@ io.on("connection", (socket) => {
     if (roomId) {
       const room = io.sockets.adapter.rooms.get(roomId);
       if (!room || room.size === 0) {
+        clearCurrentQuestion(roomQuestions, roomId);
         flushRoomOnExit(roomState, prisma.interview, roomId).catch((err) => {
           console.error(`roomState: flush-on-exit error for room ${roomId}:`, err.message);
         });
