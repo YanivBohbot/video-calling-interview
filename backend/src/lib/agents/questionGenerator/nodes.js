@@ -1,6 +1,6 @@
 import { Command, END, interrupt } from "@langchain/langgraph";
 import { AIInvalidResponseError } from "./errors.js";
-import { collectSeenProblems, pickResearchProblems, attachSources } from "./sources.js";
+import { attachSources } from "./sources.js";
 
 // Largest-remainder apportionment: floors each share, then hands the leftover
 // slots to the largest fractional parts so the result always sums to `count`.
@@ -29,34 +29,39 @@ export const makePlannerNode = () => async (state) => {
   return { plan: { categoryCounts: distributeCounts(state.count, weights) } };
 };
 
-// Grounding is optional: an unreachable LeetCode MCP server must degrade to no
-// research, never fail the whole generation.
-export const makeResearcherNode = ({ buildResearcherAgent, random = Math.random }) => async (state) => {
+const dedupeBySlug = (problems) => [...new Map(problems.map((p) => [p.slug, p])).values()];
+
+// Partial Fisher-Yates: n distinct picks, driven by the injected random source.
+const sample = (items, n, random) => {
+  const pool = [...items];
+  for (let i = 0; i < Math.min(n, pool.length); i++) {
+    const j = i + Math.floor(random() * (pool.length - i));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, n);
+};
+
+// The model only chooses search filters; code runs the search. An agent tool loop
+// here ignored the offset, repeated generic problems and hit the step limit.
+// Grounding stays optional: any failure degrades to no research.
+export const makeResearcherNode = ({ chooseSearch, searchProblems, random = Math.random }) => async (state) => {
   const technicalCount = state.plan.categoryCounts.technical || 0;
   if (!technicalCount) return { research: [] };
   try {
-    const agent = await buildResearcherAgent();
+    const query = await chooseSearch({ role: state.role, interviewType: state.interviewType });
+    const limit = technicalCount * 3;
     // Small enough that even narrow filter sets (~30 problems) still return results.
     const offset = Math.floor(random() * 21);
-    const result = await agent.invoke({
-      messages: [
-        {
-          role: "user",
-          content: [
-            `Role: ${state.role}`,
-            `Interview type: ${state.interviewType}`,
-            `Technical questions to ground: ${technicalCount}`,
-            `Start your first search at offset ${offset} so repeated runs surface different problems.`,
-          ].join("\n"),
-        },
-      ],
-    },
-    // A live run looped to LangGraph's default limit of 25 (~76s) before degrading;
-    // 12 steps leaves room for ~5 tool calls plus the structured answer.
-    { recursionLimit: 12 },
-    );
-    const seen = collectSeenProblems(result.messages);
-    return { research: pickResearchProblems(result.structuredResponse?.problems, seen, technicalCount) };
+    const attempts = [
+      { ...query, offset },
+      { ...query, offset: 0 },
+      { category: query.category, difficulty: query.difficulty, offset: 0 },
+    ];
+    for (const params of attempts) {
+      const found = dedupeBySlug(await searchProblems({ ...params, limit }));
+      if (found.length) return { research: sample(found, technicalCount, random) };
+    }
+    return { research: [] };
   } catch (err) {
     console.warn("question generator: researcher failed, continuing without grounding:", err.message);
     return { research: [] };

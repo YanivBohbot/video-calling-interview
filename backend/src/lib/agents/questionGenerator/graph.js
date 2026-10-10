@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
 import { StateGraph, START, END, MemorySaver, Command } from "@langchain/langgraph";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import { createAgent, toolStrategy } from "langchain";
+import { createAgent } from "langchain";
 import { prisma } from "../../db.js";
 import { getLeetCodeTools } from "../leetcodeMcpClient.js";
-import { QuestionGenState, DraftResponseSchema, ResearchResponseSchema } from "./state.js";
+import { QuestionGenState, DraftResponseSchema, SearchQuerySchema } from "./state.js";
 import { buildResearcherPrompt, buildDrafterPrompt } from "./prompts.js";
+import { parseSearchProblems } from "./sources.js";
 import {
   makePlannerNode,
   makeResearcherNode,
@@ -17,17 +18,28 @@ import {
 } from "./nodes.js";
 import { AIProviderError, AIInvalidResponseError, UnknownJobError } from "./errors.js";
 
-// toolStrategy, not the provider-native json_schema format: OpenAI's native mode
-// forces strict:true on every bound tool, and the LeetCode MCP schemas aren't
-// strict-compatible, so every research call failed with a 400.
-export const researcherAgentOptions = (tools) => ({
-  model: `openai:${process.env.AI_MODEL || "gpt-4o-mini"}`,
-  tools,
-  systemPrompt: buildResearcherPrompt(),
-  responseFormat: toolStrategy(ResearchResponseSchema),
-});
+// No tools are bound to this model call — it only picks filters — so OpenAI's native
+// strict structured output works here (it rejected the LeetCode MCP tool schemas).
+const defaultChooseSearch = async ({ role, interviewType }) => {
+  const agent = createAgent({
+    model: `openai:${process.env.AI_MODEL || "gpt-4o-mini"}`,
+    tools: [],
+    systemPrompt: buildResearcherPrompt(),
+    responseFormat: SearchQuerySchema,
+  });
+  const result = await agent.invoke({
+    messages: [{ role: "user", content: `Role: ${role}\nInterview type: ${interviewType}` }],
+  });
+  const { category, tags, difficulty } = result.structuredResponse;
+  return { category, tags: tags.slice(0, 3), difficulty };
+};
 
-const defaultBuildResearcherAgent = async () => createAgent(researcherAgentOptions(await getLeetCodeTools()));
+const defaultSearchProblems = async ({ tags, ...params }) => {
+  const search = (await getLeetCodeTools()).find((t) => t.name === "search_problems");
+  if (!search) throw new Error("LeetCode search_problems tool unavailable");
+  const raw = await search.invoke(tags?.length ? { ...params, tags } : params);
+  return parseSearchProblems(raw);
+};
 
 const defaultBuildDrafterAgent = async (useFallbackModel) =>
   createAgent({
@@ -43,13 +55,14 @@ const defaultBuildDrafterAgent = async (useFallbackModel) =>
 // drafter carries a retryPolicy for transient LLM failures.
 export const buildGraph = ({
   checkpointer,
-  buildResearcherAgent = defaultBuildResearcherAgent,
+  chooseSearch = defaultChooseSearch,
+  searchProblems = defaultSearchProblems,
   buildDrafterAgent = defaultBuildDrafterAgent,
   prismaClient = prisma,
 } = {}) =>
   new StateGraph(QuestionGenState)
     .addNode("planner", makePlannerNode())
-    .addNode("researcher", makeResearcherNode({ buildResearcherAgent }))
+    .addNode("researcher", makeResearcherNode({ chooseSearch, searchProblems }))
     .addNode("drafter", makeDrafterNode({ buildDrafterAgent }), { retryPolicy: { maxAttempts: 3 } })
     .addNode("validator", validatorNode, { ends: ["humanApproval", "drafter", "fallback"] })
     .addNode("fallback", fallbackNode)

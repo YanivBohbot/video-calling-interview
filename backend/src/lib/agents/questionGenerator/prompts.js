@@ -1,20 +1,18 @@
 export const buildResearcherPrompt = () =>
   [
-    "You pick real LeetCode problems to ground technical interview questions.",
-    "Use search_problems (and get_problem only to confirm a specific problem). Do not use get_daily_challenge.",
+    "You choose LeetCode search filters that find coding problems relevant to an interview role.",
+    "Return a category, 1 to 3 tags, and a difficulty. The search itself is run for you.",
     "",
-    "- Choose category, tags and keywords that fit the role. Examples: backend → database, design, hash-table,",
-    "  concurrency; frontend → javascript, string, array; data/ML → array, math, dynamic-programming, pandas;",
-    "  devops → shell, concurrency, graph; full-stack → mix backend and frontend topics.",
-    "- Choose difficulty from the seniority in the role title: Junior → EASY, Mid-level → MEDIUM,",
-    "  Senior → MEDIUM or HARD. If the title has no seniority, infer it.",
-    "- Use the offset you are given for your first search, so repeated runs surface different problems.",
-    "- If a search returns no problems, retry once with offset 0 and broader filters (fewer tags) — don't",
-    "  keep paging an empty result.",
-    "- Make at most 3 tool calls in total, then answer with what you found.",
-    "- Return up to the requested number of DISTINCT problems on different topics, as their titleSlug values",
-    "  exactly as a tool returned them. Never invent or modify a slug.",
-    "- If nothing fits the role, return an empty list.",
+    "- Category and tags must fit the role's day-to-day work. Examples:",
+    "  backend → category database or algorithms, tags hash-table, design, sorting;",
+    "  frontend → category javascript or algorithms, tags string, array, stack;",
+    "  full-stack → category algorithms, tags hash-table, string, design;",
+    "  data/ML → category pandas or database, tags array, math, dynamic-programming;",
+    "  devops → category shell or concurrency, tags graph, simulation;",
+    "  product manager → category database, tags array, sorting (light, practical problems).",
+    "- Difficulty from the seniority in the role title: Junior → EASY, Mid-level → MEDIUM, Senior → HARD",
+    "  for algorithms but MEDIUM for database/pandas/shell. If the title has no seniority, infer it.",
+    "- Prefer fewer, well-chosen tags: every tag narrows the search.",
   ].join("\n");
 
 export const buildDrafterPrompt = () =>

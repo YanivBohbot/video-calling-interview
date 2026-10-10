@@ -36,9 +36,23 @@ export const DraftResponseSchema = z.object({
   questions: z.array(DraftQuestionSchema),
 });
 
-// The model names slugs only; facts come from the tool results (see sources.js).
-export const ResearchResponseSchema = z.object({
-  problems: z.array(z.object({ slug: z.string() })),
+// Subsets of the LeetCode MCP search_problems enums, so whatever the model picks is
+// an input the tool accepts.
+export const SEARCH_CATEGORIES = ["algorithms", "database", "pandas", "javascript", "shell", "concurrency"];
+export const SEARCH_TAGS = [
+  "array", "string", "hash-table", "dynamic-programming", "math", "sorting", "greedy",
+  "depth-first-search", "breadth-first-search", "binary-search", "database", "tree", "binary-tree",
+  "matrix", "two-pointers", "heap-priority-queue", "prefix-sum", "stack", "queue", "graph",
+  "sliding-window", "design", "backtracking", "linked-list", "union-find", "trie", "recursion",
+  "binary-search-tree", "bit-manipulation", "simulation",
+];
+
+// What the model returns for research: only the search filters. Code runs the search,
+// so the model can't loop, skip the offset, or cite a problem the search didn't return.
+export const SearchQuerySchema = z.object({
+  category: z.enum(SEARCH_CATEGORIES),
+  tags: z.array(z.enum(SEARCH_TAGS)),
+  difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
 });
 
 export const QuestionGenState = new StateSchema({

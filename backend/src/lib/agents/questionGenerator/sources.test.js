@@ -1,17 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { ToolMessage, AIMessage } from "@langchain/core/messages";
-import { leetcodeUrl, collectSeenProblems, pickResearchProblems, attachSources } from "./sources.js";
+import { leetcodeUrl, parseSearchProblems, attachSources } from "./sources.js";
 import { QuestionSchema } from "./state.js";
-
-const searchResult = (questions) =>
-  new ToolMessage({
-    content: JSON.stringify({ problems: { total: questions.length, questions } }),
-    tool_call_id: "call-1",
-    name: "search_problems",
-  });
-
-const A = { title: "Second Highest Salary", titleSlug: "second-highest-salary", difficulty: "Medium" };
-const B = { title: "Rank Scores", titleSlug: "rank-scores", difficulty: "Medium" };
 
 describe("leetcodeUrl", () => {
   it("builds the canonical problem URL from a slug", () => {
@@ -19,36 +8,34 @@ describe("leetcodeUrl", () => {
   });
 });
 
-describe("collectSeenProblems", () => {
-  it("collects problems from tool messages only, ignoring the model's own text", () => {
-    const seen = collectSeenProblems([
-      new AIMessage(JSON.stringify({ titleSlug: "made-up", title: "Made Up", difficulty: "Easy" })),
-      searchResult([A, B]),
-    ]);
-    expect([...seen.keys()]).toEqual(["second-highest-salary", "rank-scores"]);
-    expect(seen.get("rank-scores")).toEqual({ slug: "rank-scores", title: "Rank Scores", difficulty: "Medium" });
+describe("parseSearchProblems", () => {
+  const raw = {
+    filters: { tags: ["database"] },
+    problems: {
+      total: 2,
+      questions: [
+        { title: "Second Highest Salary", titleSlug: "second-highest-salary", difficulty: "Medium", acRate: 48.6 },
+        { title: "Rank Scores", titleSlug: "rank-scores", difficulty: "Medium" },
+      ],
+    },
+  };
+  const expected = [
+    { slug: "second-highest-salary", title: "Second Highest Salary", difficulty: "Medium" },
+    { slug: "rank-scores", title: "Rank Scores", difficulty: "Medium" },
+  ];
+
+  it("maps the search tool's JSON string output to problems", () => {
+    expect(parseSearchProblems(JSON.stringify(raw))).toEqual(expected);
   });
 
-  it("ignores tool output that isn't JSON", () => {
-    const seen = collectSeenProblems([new ToolMessage({ content: "rate limited", tool_call_id: "x", name: "search_problems" })]);
-    expect(seen.size).toBe(0);
-  });
-});
-
-describe("pickResearchProblems", () => {
-  const seen = collectSeenProblems([searchResult([A, B])]);
-
-  it("drops slugs no tool returned, de-duplicates, and caps at max", () => {
-    const picked = pickResearchProblems(
-      [{ slug: "ghost-problem" }, { slug: "rank-scores" }, { slug: "rank-scores" }, { slug: "second-highest-salary" }],
-      seen,
-      1,
-    );
-    expect(picked).toEqual([{ slug: "rank-scores", title: "Rank Scores", difficulty: "Medium" }]);
+  it("accepts an already-parsed object too", () => {
+    expect(parseSearchProblems(raw)).toEqual(expected);
   });
 
-  it("tolerates a missing problem list", () => {
-    expect(pickResearchProblems(undefined, seen, 3)).toEqual([]);
+  it("returns [] for empty, non-JSON, or malformed output", () => {
+    expect(parseSearchProblems(JSON.stringify({ problems: { total: 0, questions: [] } }))).toEqual([]);
+    expect(parseSearchProblems("rate limited")).toEqual([]);
+    expect(parseSearchProblems({ problems: { questions: [{ title: "No slug" }] } })).toEqual([]);
   });
 });
 

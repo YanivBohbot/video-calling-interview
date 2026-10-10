@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { Command } from "@langchain/langgraph";
-import { ToolMessage } from "@langchain/core/messages";
 import {
   distributeCounts,
   makePlannerNode,
@@ -35,86 +34,90 @@ describe("planner node", () => {
 });
 
 describe("researcher node", () => {
-  it("skips the agent entirely when the plan has no technical questions", async () => {
-    const buildResearcherAgent = vi.fn();
-    const node = makeResearcherNode({ buildResearcherAgent });
-    const result = await node({ plan: { categoryCounts: { technical: 0, behavioral: 6 } } });
-    expect(result).toEqual({ research: [] });
-    expect(buildResearcherAgent).not.toHaveBeenCalled();
+  const problems = (n, prefix = "p") =>
+    Array.from({ length: n }, (_, i) => ({ slug: `${prefix}-${i}`, title: `P ${i}`, difficulty: "Medium" }));
+  const query = { category: "database", tags: ["hash-table", "sorting"], difficulty: "MEDIUM" };
+  const state = (technical, role = "Senior Backend Engineer") => ({
+    plan: { categoryCounts: { technical } },
+    role,
+    interviewType: "technical",
   });
 
-  const toolResult = new ToolMessage({
-    content: JSON.stringify({
-      problems: {
-        questions: [
-          { title: "Second Highest Salary", titleSlug: "second-highest-salary", difficulty: "Medium" },
-          { title: "Rank Scores", titleSlug: "rank-scores", difficulty: "Medium" },
-        ],
-      },
-    }),
-    tool_call_id: "call-1",
-    name: "search_problems",
+  it("skips research entirely when the plan has no technical questions", async () => {
+    const chooseSearch = vi.fn();
+    const node = makeResearcherNode({ chooseSearch, searchProblems: vi.fn() });
+    expect(await node({ plan: { categoryCounts: { technical: 0, behavioral: 6 } } })).toEqual({ research: [] });
+    expect(chooseSearch).not.toHaveBeenCalled();
   });
 
-  it("keeps only tool-returned, distinct problems, capped at the technical question count", async () => {
-    const agent = {
-      invoke: vi.fn().mockResolvedValue({
-        structuredResponse: {
-          problems: [{ slug: "ghost" }, { slug: "rank-scores" }, { slug: "rank-scores" }, { slug: "second-highest-salary" }],
-        },
-        messages: [toolResult],
-      }),
+  it("asks the model for filters, then searches with them, a bounded random offset and room to sample", async () => {
+    const chooseSearch = vi.fn().mockResolvedValue(query);
+    const searchProblems = vi.fn().mockResolvedValue(problems(9));
+    const node = makeResearcherNode({ chooseSearch, searchProblems, random: () => 0.999 });
+    await node(state(3, "Junior Frontend Engineer"));
+    expect(chooseSearch).toHaveBeenCalledWith({ role: "Junior Frontend Engineer", interviewType: "technical" });
+    expect(searchProblems).toHaveBeenCalledWith({ ...query, offset: 20, limit: 9 });
+  });
+
+  it("returns exactly the technical count of distinct problems from the results", async () => {
+    const found = [...problems(6), problems(1)[0]];
+    const node = makeResearcherNode({
+      chooseSearch: async () => query,
+      searchProblems: async () => found,
+      random: () => 0.3,
+    });
+    const { research } = await node(state(4));
+    expect(research).toHaveLength(4);
+    expect(new Set(research.map((p) => p.slug)).size).toBe(4);
+    for (const p of research) expect(found).toContainEqual(p);
+  });
+
+  it("samples differently for different random draws (Regenerate gives new problems)", async () => {
+    const run = async (r) => {
+      const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems: async () => problems(12), random: () => r });
+      return (await node(state(4))).research.map((p) => p.slug).join(",");
     };
-    const node = makeResearcherNode({ buildResearcherAgent: async () => agent, random: () => 0 });
-    const result = await node({ plan: { categoryCounts: { technical: 1 } }, role: "Senior Backend Engineer", interviewType: "technical" });
-    expect(result).toEqual({ research: [{ slug: "rank-scores", title: "Rank Scores", difficulty: "Medium" }] });
+    expect(await run(0.1)).not.toBe(await run(0.9));
   });
 
-  it("tells the agent how many problems it needs and a varied search offset", async () => {
-    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [] }) };
-    const node = makeResearcherNode({ buildResearcherAgent: async () => agent, random: () => 0.5 });
-    await node({ plan: { categoryCounts: { technical: 3 } }, role: "Junior Frontend Engineer", interviewType: "technical" });
-    const content = agent.invoke.mock.calls[0][0].messages[0].content;
-    expect(content).toContain("Junior Frontend Engineer");
-    expect(content).toContain("Technical questions to ground: 3");
-    expect(content).toContain("offset 10");
+  it("falls back to offset 0, then to fewer filters, when a search comes back empty", async () => {
+    const searchProblems = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValue(problems(5));
+    const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems, random: () => 0.5 });
+    const { research } = await node(state(2));
+    expect(research).toHaveLength(2);
+    expect(searchProblems.mock.calls.map(([p]) => p)).toEqual([
+      { ...query, offset: 10, limit: 6 },
+      { ...query, offset: 0, limit: 6 },
+      { category: "database", difficulty: "MEDIUM", offset: 0, limit: 6 },
+    ]);
   });
 
-  // Narrow filter combinations can be small (javascript + EASY = 30 problems), so a
-  // large offset returned nothing and sent the model into a retry loop.
-  it("keeps the search offset at or below 20", async () => {
-    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [] }) };
-    const node = makeResearcherNode({ buildResearcherAgent: async () => agent, random: () => 0.999 });
-    await node({ plan: { categoryCounts: { technical: 2 } }, role: "x", interviewType: "technical" });
-    expect(agent.invoke.mock.calls[0][0].messages[0].content).toContain("offset 20");
+  it("returns no research when every search is empty", async () => {
+    const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems: async () => [] });
+    expect(await node(state(2))).toEqual({ research: [] });
   });
 
-  it("bounds the agent's tool loop so a wandering search can't take a minute", async () => {
-    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [] }) };
-    const node = makeResearcherNode({ buildResearcherAgent: async () => agent });
-    await node({ plan: { categoryCounts: { technical: 2 } }, role: "x", interviewType: "technical" });
-    expect(agent.invoke.mock.calls[0][1]).toEqual({ recursionLimit: 12 });
-  });
-
-  it("returns no research when the agent picked nothing", async () => {
-    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [toolResult] }) };
-    const node = makeResearcherNode({ buildResearcherAgent: async () => agent });
-    expect(await node({ plan: { categoryCounts: { technical: 2 } }, role: "x", interviewType: "technical" })).toEqual({ research: [] });
-  });
-
-  it("does not throw when the LeetCode MCP connection is unavailable (agent builder rejects)", async () => {
-    const node = makeResearcherNode({ buildResearcherAgent: async () => { throw new Error("MCP connection failed"); } });
-    await expect(
-      node({ plan: { categoryCounts: { technical: 4 } }, role: "x", interviewType: "technical" }),
-    ).resolves.toEqual({ research: [] });
+  it("does not throw when the LeetCode MCP connection is unavailable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const node = makeResearcherNode({
+      chooseSearch: async () => query,
+      searchProblems: async () => {
+        throw new Error("MCP connection failed");
+      },
+    });
+    await expect(node(state(4))).resolves.toEqual({ research: [] });
+    warn.mockRestore();
   });
 
   it("logs the error when it degrades, so a persistent failure is visible", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const node = makeResearcherNode({
-      buildResearcherAgent: async () => ({ invoke: vi.fn().mockRejectedValue(new Error("400 Invalid schema")) }),
+      chooseSearch: async () => {
+        throw new Error("400 Invalid schema");
+      },
+      searchProblems: vi.fn(),
     });
-    await node({ plan: { categoryCounts: { technical: 4 } }, role: "x", interviewType: "technical" });
+    await node(state(4));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("researcher"), "400 Invalid schema");
     warn.mockRestore();
   });

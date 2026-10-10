@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { StateGraph, START, END } from "@langchain/langgraph";
-import { QuestionSchema, DraftResponseSchema, ResearchResponseSchema, QuestionGenState } from "./state.js";
+import { QuestionSchema, DraftResponseSchema, SearchQuerySchema, QuestionGenState } from "./state.js";
 
 describe("question generator schemas", () => {
   it("accepts a valid question", () => {
@@ -21,9 +21,12 @@ describe("question generator schemas", () => {
     expect(() => DraftResponseSchema.parse({ questions: "not an array" })).toThrow();
   });
 
-  it("ResearchResponseSchema is a list of chosen slugs", () => {
-    expect(ResearchResponseSchema.parse({ problems: [{ slug: "two-sum" }] })).toEqual({ problems: [{ slug: "two-sum" }] });
-    expect(() => ResearchResponseSchema.parse({ usedLeetCode: true, notes: "n" })).toThrow();
+  it("SearchQuerySchema only allows search filters the LeetCode tool accepts", () => {
+    const q = { category: "database", tags: ["hash-table"], difficulty: "MEDIUM" };
+    expect(SearchQuerySchema.parse(q)).toEqual(q);
+    expect(() => SearchQuerySchema.parse({ ...q, category: "frontend" })).toThrow();
+    expect(() => SearchQuerySchema.parse({ ...q, tags: ["kubernetes"] })).toThrow();
+    expect(() => SearchQuerySchema.parse({ ...q, difficulty: "Medium" })).toThrow();
   });
 
   it("QuestionGenState fields default correctly when run through a graph", async () => {
