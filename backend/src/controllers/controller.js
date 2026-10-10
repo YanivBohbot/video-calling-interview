@@ -14,7 +14,7 @@ const toUserDoc = (user) => {
   return { _id: id, clerkID: clerkId, ...rest };
 };
 
-const toInterviewDoc = (iv) => {
+export const toInterviewDoc = (iv) => {
   if (!iv) return null;
   const { id, interviewer, interviewerId, ...rest } = iv;
   const doc = { _id: id, ...rest };
@@ -33,7 +33,7 @@ const toInterviewDoc = (iv) => {
 
 // ── Resolve interviewer by clerkId ────────────────────────────────────────────
 
-const INTERVIEWER_SELECT = {
+export const INTERVIEWER_SELECT = {
   id: true,
   name: true,
   email: true,

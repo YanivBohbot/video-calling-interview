@@ -17,6 +17,7 @@ router.post("/", controller.createInterview);
 
 // AI: generate questions for an interview (must come before generic /:id routes)
 router.post("/:id/questions/generate", protectRoute, aiController.generateQuestions);
+router.post("/:id/questions/approve", protectRoute, aiController.approveQuestions);
 
 // Get single interview
 router.get("/:id", controller.getInterview);

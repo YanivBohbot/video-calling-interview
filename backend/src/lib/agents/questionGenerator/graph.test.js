@@ -67,6 +67,19 @@ describe("question generator graph", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("a jobId minted for one interview cannot resume or write to another", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const graph = buildGraph(makeDeps({ update }));
+    const { jobId } = await startQuestionGeneration(
+      { interviewId: "iv-7", role: "x", interviewType: "technical", count: 2 },
+      { graph },
+    );
+    await expect(
+      resumeQuestionGeneration({ interviewId: "iv-8", jobId, approved: true }, { graph }),
+    ).rejects.toBeInstanceOf(UnknownJobError);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("rejects approving the same job twice, writing only once", async () => {
     const update = vi.fn().mockResolvedValue({});
     const graph = buildGraph(makeDeps({ update }));
