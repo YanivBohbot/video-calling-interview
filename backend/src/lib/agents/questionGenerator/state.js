@@ -1,10 +1,25 @@
 import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod";
 
+export const SourceSchema = z.object({
+  type: z.literal("leetcode"),
+  title: z.string(),
+  slug: z.string(),
+  difficulty: z.string(),
+  url: z.string(),
+});
+
 export const QuestionSchema = z.object({
   text: z.string(),
   category: z.enum(["technical", "behavioral", "system-design"]),
   difficulty: z.enum(["easy", "medium", "hard"]),
+  source: SourceSchema.optional(),
+});
+
+export const ResearchProblemSchema = z.object({
+  slug: z.string(),
+  title: z.string(),
+  difficulty: z.string(),
 });
 
 export const DraftResponseSchema = z.object({
