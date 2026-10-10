@@ -49,7 +49,11 @@ export const makeResearcherNode = ({ buildResearcherAgent, random = Math.random 
           ].join("\n"),
         },
       ],
-    });
+    },
+    // A live run looped to LangGraph's default limit of 25 (~76s) before degrading;
+    // 12 steps leaves room for ~5 tool calls plus the structured answer.
+    { recursionLimit: 12 },
+    );
     const seen = collectSeenProblems(result.messages);
     return { research: pickResearchProblems(result.structuredResponse?.problems, seen, technicalCount) };
   } catch (err) {
@@ -99,6 +103,12 @@ const validateContent = (state) => {
     const key = q.text.trim().toLowerCase();
     if (seen.has(key)) errors.push(`duplicate question: "${q.text}"`);
     seen.add(key);
+  }
+  if (state.plan) {
+    for (const [category, expected] of Object.entries(state.plan.categoryCounts)) {
+      const actual = state.draftQuestions.filter((q) => q.category === category).length;
+      if (actual !== expected) errors.push(`expected ${expected} ${category} questions, got ${actual}`);
+    }
   }
   const usedSources = new Set();
   for (const q of state.draftQuestions) {

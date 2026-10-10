@@ -80,6 +80,13 @@ describe("researcher node", () => {
     expect(content).toContain("offset 20");
   });
 
+  it("bounds the agent's tool loop so a wandering search can't take a minute", async () => {
+    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [] }) };
+    const node = makeResearcherNode({ buildResearcherAgent: async () => agent });
+    await node({ plan: { categoryCounts: { technical: 2 } }, role: "x", interviewType: "technical" });
+    expect(agent.invoke.mock.calls[0][1]).toEqual({ recursionLimit: 12 });
+  });
+
   it("returns no research when the agent picked nothing", async () => {
     const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { problems: [] }, messages: [toolResult] }) };
     const node = makeResearcherNode({ buildResearcherAgent: async () => agent });
@@ -220,6 +227,22 @@ describe("validator node", () => {
     await expect(
       validatorNode({ draftQuestions: [], count: 2, retryCount: 3, useFallbackModel: true }),
     ).rejects.toBeInstanceOf(AIInvalidResponseError);
+  });
+
+  it("rejects a draft whose category mix doesn't match the plan", async () => {
+    const result = await validatorNode({
+      plan: { categoryCounts: { technical: 2, behavioral: 1 } },
+      draftQuestions: [
+        { text: "Tech one", category: "technical", difficulty: "medium" },
+        { text: "Design a chat app", category: "system-design", difficulty: "hard" },
+        { text: "A conflict you solved", category: "behavioral", difficulty: "easy" },
+      ],
+      count: 3,
+      retryCount: 0,
+      useFallbackModel: false,
+    });
+    expect(result.goto).toEqual(["drafter"]);
+    expect(result.update.validationErrors.some((e) => e.includes("expected 2 technical"))).toBe(true);
   });
 
   it("rejects two questions built on the same LeetCode problem", async () => {
