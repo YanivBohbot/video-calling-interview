@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Video, Calendar, User, Mail, Briefcase, PlusCircle, ArrowLeft, Clock, CheckCircle, Copy, Check, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
+import { ROLE_DOMAINS, SENIORITIES, CUSTOM_ROLE, composeRole } from '../lib/roleCatalog';
 
 const INTERVIEW_TYPES = [
   { value: 'technical',        label: 'Technical Screen' },
@@ -38,13 +39,22 @@ const NewInterview: React.FC = () => {
   const [formData, setFormData] = useState({
     candidateName: '',
     candidateEmail: '',
-    role: '',
     date: '',
     time: '',
     duration: 60,
     interviewType: 'technical',
     notes: '',
   });
+  const [roleDomain, setRoleDomain] = useState<string>('backend');
+  const [roleSeniority, setRoleSeniority] = useState<string>('mid');
+  const [customRole, setCustomRole] = useState('');
+
+  const resolvedRole = () => {
+    if (roleDomain === CUSTOM_ROLE) return customRole.trim();
+    const domain = ROLE_DOMAINS.find((d) => d.key === roleDomain)!;
+    const seniority = SENIORITIES.find((s) => s.key === roleSeniority)!;
+    return composeRole(seniority.label, domain.label);
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -60,7 +70,7 @@ const NewInterview: React.FC = () => {
         body: JSON.stringify({
           candidateName: formData.candidateName,
           candidateEmail: formData.candidateEmail,
-          role: formData.role,
+          role: resolvedRole(),
           scheduledAt,
           duration: formData.duration,
           interviewType: formData.interviewType,
@@ -184,7 +194,10 @@ const NewInterview: React.FC = () => {
               <button
                 onClick={() => {
                   setCreated(null);
-                  setFormData({ candidateName: '', candidateEmail: '', role: '', date: '', time: '', duration: 60, interviewType: 'technical', notes: '' });
+                  setFormData({ candidateName: '', candidateEmail: '', date: '', time: '', duration: 60, interviewType: 'technical', notes: '' });
+                  setRoleDomain('backend');
+                  setRoleSeniority('mid');
+                  setCustomRole('');
                 }}
                 className="flex-1 py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-hover transition-all"
               >
@@ -271,15 +284,47 @@ const NewInterview: React.FC = () => {
               <Briefcase size={16} className="text-brand" />
               Role
             </label>
-            <input
-              required
-              type="text"
-              disabled={isSubmitting}
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              placeholder="e.g. Senior Frontend Developer"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all disabled:opacity-50"
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <select
+                disabled={isSubmitting}
+                value={roleDomain}
+                onChange={(e) => setRoleDomain(e.target.value)}
+                aria-label="Role domain"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all disabled:opacity-50 bg-white"
+              >
+                {ROLE_DOMAINS.map((d) => (
+                  <option key={d.key} value={d.key}>{d.label}</option>
+                ))}
+                <option value={CUSTOM_ROLE}>Custom…</option>
+              </select>
+              {roleDomain === CUSTOM_ROLE ? (
+                <input
+                  required
+                  type="text"
+                  disabled={isSubmitting}
+                  value={customRole}
+                  onChange={(e) => setCustomRole(e.target.value)}
+                  placeholder="e.g. Staff iOS Engineer"
+                  aria-label="Custom role"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all disabled:opacity-50"
+                />
+              ) : (
+                <select
+                  disabled={isSubmitting}
+                  value={roleSeniority}
+                  onChange={(e) => setRoleSeniority(e.target.value)}
+                  aria-label="Seniority"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all disabled:opacity-50 bg-white"
+                >
+                  {SENIORITIES.map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {roleDomain !== CUSTOM_ROLE && (
+              <p className="text-xs text-slate-400">Saved as “{resolvedRole()}”</p>
+            )}
           </div>
 
           {/* Interview type + duration */}
