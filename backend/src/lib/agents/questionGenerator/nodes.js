@@ -1,3 +1,6 @@
+import { Command } from "@langchain/langgraph";
+import { AIInvalidResponseError } from "./errors.js";
+
 // Largest-remainder apportionment: floors each share, then hands the leftover
 // slots to the largest fractional parts so the result always sums to `count`.
 // Fractions are rounded so float noise (0.6000000000000001 vs 0.5999999999999996)
@@ -62,3 +65,44 @@ export const makeDrafterNode = ({ buildDrafterAgent }) => async (state) => {
   );
   return { draftQuestions: result.structuredResponse.questions };
 };
+
+const MAX_CONTENT_RETRIES = 2;
+
+const validateContent = (state) => {
+  const errors = [];
+  if (state.draftQuestions.length !== state.count) {
+    errors.push(`expected ${state.count} questions, got ${state.draftQuestions.length}`);
+  }
+  const seen = new Set();
+  for (const q of state.draftQuestions) {
+    if (!q.text || !q.text.trim()) errors.push("empty question text");
+    const key = q.text.trim().toLowerCase();
+    if (seen.has(key)) errors.push(`duplicate question: "${q.text}"`);
+    seen.add(key);
+  }
+  return errors;
+};
+
+// Content failures loop back to the drafter; once those retries are spent the
+// fallback model gets exactly one pass, and a failure after that bubbles up.
+export const validatorNode = async (state) => {
+  const errors = validateContent(state);
+  if (errors.length === 0) {
+    return new Command({ update: { validationErrors: [] }, goto: "humanApproval" });
+  }
+  if (state.retryCount < MAX_CONTENT_RETRIES) {
+    return new Command({
+      update: { validationErrors: errors, retryCount: state.retryCount + 1 },
+      goto: "drafter",
+    });
+  }
+  if (!state.useFallbackModel) {
+    return new Command({ update: { validationErrors: errors }, goto: "fallback" });
+  }
+  throw new AIInvalidResponseError(`Validation failed after fallback: ${errors.join("; ")}`);
+};
+
+export const fallbackNode = async (state) => ({
+  useFallbackModel: true,
+  retryCount: state.retryCount + 1,
+});

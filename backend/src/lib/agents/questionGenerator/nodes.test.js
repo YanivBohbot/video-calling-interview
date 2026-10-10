@@ -1,5 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
-import { distributeCounts, makePlannerNode, makeResearcherNode, makeDrafterNode } from "./nodes.js";
+import { Command } from "@langchain/langgraph";
+import {
+  distributeCounts,
+  makePlannerNode,
+  makeResearcherNode,
+  makeDrafterNode,
+  validatorNode,
+  fallbackNode,
+} from "./nodes.js";
+import { AIInvalidResponseError } from "./errors.js";
 
 describe("distributeCounts", () => {
   it("splits counts proportionally and sums to the total, largest remainder first", () => {
@@ -88,5 +97,51 @@ describe("drafter node", () => {
     const content = agent.invoke.mock.calls[0][0].messages[0].content;
     expect(content).toContain("Grounded in Two Sum");
     expect(content).toContain("Generate exactly 1");
+  });
+});
+
+describe("validator node", () => {
+  const goodQuestions = [
+    { text: "Explain closures", category: "technical", difficulty: "medium" },
+    { text: "Describe a conflict you resolved", category: "behavioral", difficulty: "easy" },
+  ];
+
+  it("routes to humanApproval when the draft is valid", async () => {
+    const result = await validatorNode({ draftQuestions: goodQuestions, count: 2, retryCount: 0, useFallbackModel: false });
+    expect(result).toBeInstanceOf(Command);
+    expect(result.goto).toEqual(["humanApproval"]);
+    expect(result.update.validationErrors).toEqual([]);
+  });
+
+  it("catches a duplicate question and routes back to drafter while retries remain", async () => {
+    const dup = [goodQuestions[0], { ...goodQuestions[0] }];
+    const result = await validatorNode({ draftQuestions: dup, count: 2, retryCount: 0, useFallbackModel: false });
+    expect(result.goto).toEqual(["drafter"]);
+    expect(result.update.retryCount).toBe(1);
+    expect(result.update.validationErrors.some((e) => e.includes("duplicate"))).toBe(true);
+  });
+
+  it("routes to fallback once content retries are exhausted", async () => {
+    const result = await validatorNode({ draftQuestions: [], count: 2, retryCount: 2, useFallbackModel: false });
+    expect(result.goto).toEqual(["fallback"]);
+  });
+
+  it("throws AIInvalidResponseError when the fallback attempt also fails", async () => {
+    await expect(
+      validatorNode({ draftQuestions: [], count: 2, retryCount: 3, useFallbackModel: true }),
+    ).rejects.toBeInstanceOf(AIInvalidResponseError);
+  });
+
+  it("catches a wrong question count", async () => {
+    const result = await validatorNode({ draftQuestions: [goodQuestions[0]], count: 2, retryCount: 0, useFallbackModel: false });
+    expect(result.goto).toEqual(["drafter"]);
+    expect(result.update.validationErrors.some((e) => e.includes("expected 2"))).toBe(true);
+  });
+});
+
+describe("fallback node", () => {
+  it("sets useFallbackModel and bumps retryCount without resetting it", async () => {
+    const result = await fallbackNode({ retryCount: 2 });
+    expect(result).toEqual({ useFallbackModel: true, retryCount: 3 });
   });
 });
