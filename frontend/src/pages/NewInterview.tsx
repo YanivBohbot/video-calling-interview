@@ -58,6 +58,11 @@ const NewInterview: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // `required` lets whitespace through; resolvedRole() trims it to "".
+    if (!resolvedRole()) {
+      setError('Enter a role for the custom option.');
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
 
