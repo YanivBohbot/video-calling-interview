@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { API_URL } from './config';
 import { readStorage, writeStorage } from './storage';
@@ -53,11 +53,17 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
     setDemo(null);
   }, []);
 
-  const mode: CredentialMode = demo ? 'demo' : isSignedIn ? 'clerk' : 'none';
+  // A real Clerk session always wins: someone who tried the demo and then signed in
+  // must see their own account, so the leftover demo token is dropped.
+  useEffect(() => {
+    if (isSignedIn && demo) leaveDemo();
+  }, [isSignedIn, demo, leaveDemo]);
+
+  const mode: CredentialMode = isSignedIn ? 'clerk' : demo ? 'demo' : 'none';
 
   const getBearer = useCallback(async () => {
-    if (demo) return demo.token;
     if (isSignedIn) return getToken();
+    if (demo) return demo.token;
     return null;
   }, [demo, isSignedIn, getToken]);
 
