@@ -39,6 +39,9 @@ model Interview {
   codeSnapshot   String?
   codeLanguage   String?  @default("javascript")
   questions      Json?
+  // SHA-256 of the candidate invite secret (the secret itself is never stored).
+  inviteTokenHash String?   @unique
+  inviteCreatedAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

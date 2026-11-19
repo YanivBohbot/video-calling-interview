@@ -6,6 +6,8 @@ export const TEST_CONFIG = Object.freeze({
   openaiApiKey: "sk-test",
   aiQuestionCount: 6,
   stream: {},
+  clerk: { secretKey: "sk_test_fake", publishableKey: "pk_test_fake" },
+  demoTokenSecret: "test-demo-secret-0123456789abcdef0123",
 });
 
 // The real container (every repository, service, controller and router) over a stub

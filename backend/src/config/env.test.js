@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { loadConfig } from "./env.js";
 
-const base = { DATABASE_URL: "postgres://x", CLIENT_URL: "http://localhost:5174" };
+const base = {
+  DATABASE_URL: "postgres://x",
+  CLIENT_URL: "http://localhost:5174",
+  CLERK_SECRET_KEY: "sk_test_fake",
+  DEMO_TOKEN_SECRET: "test-demo-secret-0123456789abcdef0123",
+};
 
 describe("loadConfig", () => {
   it("applies defaults for port and question count", () => {
@@ -47,6 +52,30 @@ describe("loadConfig", () => {
     expect(config.aiQuestionCount).toBe(6);
     expect(config.openaiApiKey).toBeUndefined();
     expect(config.stream.apiSecret).toBeUndefined();
+  });
+
+  it.each(["CLERK_SECRET_KEY", "DEMO_TOKEN_SECRET"])("requires %s and names it without echoing values", (name) => {
+    const env = { ...base, OPENAI_API_KEY: "sk-SECRETVALUE" };
+    delete env[name];
+    let message = "";
+    try {
+      loadConfig(env);
+    } catch (err) {
+      message = err.message;
+    }
+    expect(message).toContain(name);
+    expect(message).not.toContain("SECRETVALUE");
+  });
+
+  it("rejects a demo token secret shorter than 32 characters", () => {
+    expect(() => loadConfig({ ...base, DEMO_TOKEN_SECRET: "short-SECRET" })).toThrow(/DEMO_TOKEN_SECRET/);
+    expect(() => loadConfig({ ...base, DEMO_TOKEN_SECRET: "short-SECRET" })).not.toThrow(/short-SECRET/);
+  });
+
+  it("exposes the Clerk and demo settings", () => {
+    const config = loadConfig({ ...base, CLERK_PUBLISHABLE_KEY: "pk_test_fake" });
+    expect(config.clerk).toEqual({ secretKey: "sk_test_fake", publishableKey: "pk_test_fake" });
+    expect(config.demoTokenSecret).toBe("test-demo-secret-0123456789abcdef0123");
   });
 
   it("returns a frozen object", () => {

@@ -13,6 +13,11 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: optional,
   STREAM_API_KEY: optional,
   STREAM_API_SECRET: optional,
+  // Verifies Clerk session tokens and reads Clerk users (no publishable key needed server-side).
+  CLERK_SECRET_KEY: z.string().min(1),
+  CLERK_PUBLISHABLE_KEY: optional,
+  // Signs the demo ("Continue as Guest") tokens.
+  DEMO_TOKEN_SECRET: z.string().min(32),
 });
 
 // Parses the environment once, at boot (never on import, so tests need no env).
@@ -31,5 +36,7 @@ export const loadConfig = (env) => {
     aiQuestionCount: e.AI_QUESTION_COUNT,
     openaiApiKey: e.OPENAI_API_KEY,
     stream: Object.freeze({ apiKey: e.STREAM_API_KEY, apiSecret: e.STREAM_API_SECRET }),
+    clerk: Object.freeze({ secretKey: e.CLERK_SECRET_KEY, publishableKey: e.CLERK_PUBLISHABLE_KEY }),
+    demoTokenSecret: e.DEMO_TOKEN_SECRET,
   });
 };
