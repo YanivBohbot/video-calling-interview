@@ -1,8 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
-vi.mock("../lib/db.js", () => ({ prisma: {} }));
-
-import { validateQuestionsPayload } from "./controller.js";
+import { validateQuestionsPayload } from "./question.validation.js";
 
 const base = { text: "Rank players", category: "technical", difficulty: "medium" };
 const goodSource = {

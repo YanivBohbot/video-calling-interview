@@ -7,7 +7,9 @@ import {
   UnknownJobError,
 } from "../lib/agents/questionGenerator/errors.js";
 import { createRateLimiter } from "../lib/rateLimiter.js";
-import { toInterviewDoc, INTERVIEWER_SELECT, validateQuestionsPayload } from "./controller.js";
+import { toInterviewDoc } from "../shared/mongoShape.js";
+import { INTERVIEWER_SELECT } from "../modules/interviews/interview.repository.js";
+import { validateQuestionsPayload } from "../modules/questions/question.validation.js";
 
 const DEFAULT_COUNT = Number(process.env.AI_QUESTION_COUNT || 6);
 const questionsLimiter = createRateLimiter({ max: 10, windowMs: 60 * 60 * 1000 });
