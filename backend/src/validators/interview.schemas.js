@@ -15,8 +15,6 @@ export const createInterviewBody = z.object({
   duration: z.number({ invalid_type_error: "Invalid duration" }).int("Invalid duration").nonnegative("Invalid duration").nullish(),
   interviewType: optionalString("Invalid interviewType"),
   notes: optionalString("Invalid notes"),
-  interviewerId: optionalString("Invalid interviewerId"),
-  interviewerClerkId: optionalString("Invalid interviewerClerkId"),
 });
 
 export const updateStatusBody = z.object({ status });

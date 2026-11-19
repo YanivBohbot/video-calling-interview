@@ -12,7 +12,7 @@ let streamClient;
 
 beforeEach(() => {
   prisma = {
-    interview: { create: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
+    interview: { create: vi.fn(), update: vi.fn(), findUnique: vi.fn().mockResolvedValue({ id: "iv1", interviewerId: "u-demo" }) },
     user: {
       create: vi.fn(),
       upsert: vi.fn().mockResolvedValue({ id: "demo-id", clerkId: "demo", name: "Demo User" }),
@@ -31,7 +31,6 @@ const FRONTEND_NEW_INTERVIEW = {
   duration: 60,
   interviewType: "technical",
   notes: "",
-  interviewerId: "demo",
 };
 
 describe("POST /api/interviews", () => {

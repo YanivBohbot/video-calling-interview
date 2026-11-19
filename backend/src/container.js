@@ -78,10 +78,7 @@ export const createContainer = ({
   const services = {
     session: createSessionService({ sessionRepository: repositories.session }),
     user: userService,
-    interview: createInterviewService({
-      interviewRepository: repositories.interview,
-      resolveInterviewerId: userService.resolveInterviewerId,
-    }),
+    interview: createInterviewService({ interviewRepository: repositories.interview, clientUrl: config.clientUrl }),
     question: createQuestionService({
       interviewRepository: repositories.interview,
       generation,

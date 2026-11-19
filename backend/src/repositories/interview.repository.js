@@ -70,18 +70,19 @@ export const createInterviewRepository = ({ prisma }) => ({
 
   delete: (id) => prisma.interview.delete({ where: { id } }).catch(notFound),
 
-  countDashboardStats: async () => {
-    const [total, completed, live, scheduled, cancelled, totalUsers, done] = await Promise.all([
-      prisma.interview.count(),
-      prisma.interview.count({ where: { status: "completed" } }),
-      prisma.interview.count({ where: { status: "live" } }),
-      prisma.interview.count({ where: { status: "scheduled" } }),
-      prisma.interview.count({ where: { status: "cancelled" } }),
-      prisma.user.count(),
-      prisma.interview.findMany({ where: { status: "completed" }, select: { duration: true } }),
+  countDashboardStats: async (interviewerId) => {
+    const mine = { interviewerId };
+    const [total, completed, live, scheduled, cancelled, done] = await Promise.all([
+      prisma.interview.count({ where: mine }),
+      prisma.interview.count({ where: { ...mine, status: "completed" } }),
+      prisma.interview.count({ where: { ...mine, status: "live" } }),
+      prisma.interview.count({ where: { ...mine, status: "scheduled" } }),
+      prisma.interview.count({ where: { ...mine, status: "cancelled" } }),
+      prisma.interview.findMany({ where: { ...mine, status: "completed" }, select: { duration: true } }),
     ]);
-    return { total, completed, live, scheduled, cancelled, totalUsers, durations: done.map((i) => i.duration) };
+    return { total, completed, live, scheduled, cancelled, durations: done.map((i) => i.duration) };
   },
 
-  findRecent: (take) => prisma.interview.findMany({ orderBy: { updatedAt: "desc" }, take, select: ACTIVITY_SELECT }),
+  findRecent: (take, interviewerId) =>
+    prisma.interview.findMany({ where: { interviewerId }, orderBy: { updatedAt: "desc" }, take, select: ACTIVITY_SELECT }),
 });

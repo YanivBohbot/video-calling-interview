@@ -1,6 +1,8 @@
-import { NotFoundError, ValidationError } from "../shared/errors.js";
+import { AppError, NotFoundError, ValidationError } from "../shared/errors.js";
 import { averageDuration } from "../shared/stats.js";
 import { validateQuestionsPayload } from "../validators/question.validation.js";
+import { generateInviteSecret } from "../auth/inviteSecrets.js";
+import { CANDIDATE, DEMO } from "../auth/principal.js";
 
 const STATUSES = ["scheduled", "live", "completed", "cancelled"];
 const RECENT_ACTIVITY_COUNT = 8;
@@ -11,29 +13,36 @@ const assertStatus = (status) => {
   if (!STATUSES.includes(status)) throw new ValidationError("Invalid status");
 };
 
-export const createInterviewService = ({ interviewRepository, resolveInterviewerId }) => {
-  const requireInterviewerId = async (rawInterviewer) => {
-    const interviewerId = await resolveInterviewerId(rawInterviewer);
-    if (!interviewerId) throw new ValidationError("Interviewer not found");
-    return interviewerId;
+// Every method takes the caller (principal) first. Interviewers and the demo visitor
+// only ever see their own interviews: anything else is "not found", so ids can't be probed.
+export const createInterviewService = ({ interviewRepository, clientUrl }) => {
+  const notFound = () => new NotFoundError("Interview not found");
+
+  const isOwner = (principal, interview) => !!interview && interview.interviewerId === principal.userId;
+
+  // Loads an interview the caller owns (with its interviewer), or throws 404.
+  const getOwned = async (principal, id) => {
+    const interview = await interviewRepository.findByIdWithInterviewer(id);
+    if (!isOwner(principal, interview)) throw notFound();
+    return interview;
   };
 
-  const list = async ({ rawInterviewer } = {}) => {
-    const where = rawInterviewer ? { interviewerId: await requireInterviewerId(rawInterviewer) } : {};
-    return interviewRepository.findMany(where);
+  const assertOwned = async (principal, id) => {
+    if (!isOwner(principal, await interviewRepository.findById(id))) throw notFound();
   };
 
-  const create = async ({ rawInterviewer, body = {} }) => {
+  const list = (principal) => interviewRepository.findMany({ interviewerId: principal.userId });
+
+  const create = async (principal, body = {}) => {
     const { candidateName, candidateEmail, role, scheduledAt, duration, interviewType, notes } = body;
-    if (!rawInterviewer || !candidateName || !candidateEmail || !role || !scheduledAt) {
+    if (!candidateName || !candidateEmail || !role || !scheduledAt) {
       throw new ValidationError("Missing required interview fields");
     }
     const date = new Date(scheduledAt);
     if (Number.isNaN(date.getTime())) throw new ValidationError("Invalid scheduledAt");
 
-    const interviewerId = await requireInterviewerId(rawInterviewer);
     return interviewRepository.create({
-      interviewerId,
+      interviewerId: principal.userId,
       candidateName,
       candidateEmail,
       role,
@@ -44,19 +53,14 @@ export const createInterviewService = ({ interviewRepository, resolveInterviewer
     });
   };
 
-  const get = async (id) => {
-    const interview = await interviewRepository.findByIdWithInterviewer(id);
-    if (!interview) throw new NotFoundError("Interview not found");
-    return interview;
-  };
-
-  const updateStatus = async (id, status) => {
+  const updateStatus = async (principal, id, status) => {
     assertStatus(status);
+    await assertOwned(principal, id);
     return interviewRepository.updateStatus(id, status);
   };
 
   // Partial update of the interview report (notes / status / saved questions).
-  const update = async (id, { notes, status, questions } = {}) => {
+  const update = async (principal, id, { notes, status, questions } = {}) => {
     const data = {};
     if (notes !== undefined) data.notes = notes;
     if (status !== undefined) {
@@ -68,17 +72,25 @@ export const createInterviewService = ({ interviewRepository, resolveInterviewer
       if (problem) throw new ValidationError(problem);
       data.questions = questions;
     }
+    await assertOwned(principal, id);
     return interviewRepository.update(id, data);
   };
 
-  const dashboardStats = async () => {
-    const { total, completed, live, scheduled, cancelled, totalUsers, durations } =
-      await interviewRepository.countDashboardStats();
-    return { total, completed, live, scheduled, cancelled, avgDuration: averageDuration(durations), totalUsers };
+  // Demo visitors can't delete: the demo data is the showcase.
+  const remove = async (principal, id) => {
+    if (principal.kind === DEMO) throw new AppError(403, "Not allowed in demo mode");
+    await assertOwned(principal, id);
+    return interviewRepository.delete(id);
   };
 
-  const recentActivity = async () => {
-    const recent = await interviewRepository.findRecent(RECENT_ACTIVITY_COUNT);
+  const dashboardStats = async (principal) => {
+    const { total, completed, live, scheduled, cancelled, durations } =
+      await interviewRepository.countDashboardStats(principal.userId);
+    return { total, completed, live, scheduled, cancelled, avgDuration: averageDuration(durations) };
+  };
+
+  const recentActivity = async (principal) => {
+    const recent = await interviewRepository.findRecent(RECENT_ACTIVITY_COUNT, principal.userId);
     return recent.map((iv) => ({
       id: iv.id,
       candidateName: iv.candidateName,
@@ -91,14 +103,35 @@ export const createInterviewService = ({ interviewRepository, resolveInterviewer
     }));
   };
 
+  // New candidate link; replaces (and so revokes) any previous one. Only the hash is stored.
+  const createInvite = async (principal, id) => {
+    await assertOwned(principal, id);
+    const { secret, hash } = generateInviteSecret();
+    await interviewRepository.setInviteHash(id, hash);
+    return { url: `${clientUrl}/room/${encodeURIComponent(id)}#invite=${secret}` };
+  };
+
+  // The room page: owners get the full interview, the invited candidate a reduced view.
+  const roomView = async (principal, id) => {
+    if (principal.kind === CANDIDATE) {
+      if (principal.interviewId !== id) throw notFound();
+      const interview = await interviewRepository.findById(id);
+      if (!interview) throw notFound();
+      return { viewer: "candidate", interview };
+    }
+    return { viewer: "owner", interview: await getOwned(principal, id) };
+  };
+
   return {
     list,
     create,
-    get,
+    get: getOwned,
     updateStatus,
     update,
-    remove: (id) => interviewRepository.delete(id),
+    remove,
     dashboardStats,
     recentActivity,
+    createInvite,
+    roomView,
   };
 };
