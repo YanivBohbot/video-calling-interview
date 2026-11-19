@@ -31,6 +31,10 @@ export const createUserRepository = ({ prisma }) => ({
   upsertProfile: (clerkId, { update, create }) =>
     prisma.user.upsert({ where: { clerkId }, update, create, select: USER_SELECT }).catch(translatePrismaError),
 
+  // First visit of a Clerk user: create their row from Clerk's profile.
+  createFromClerk: ({ clerkId, name, email, profileImage }) =>
+    prisma.user.create({ data: { clerkId, name, email, profileImage }, select: IDENTITY_SELECT }).catch(translatePrismaError),
+
   // Backs "Guest Mode": the demo account is created on first use.
   upsertDemoUser: () => prisma.user.upsert({ where: { clerkId: "demo" }, update: {}, create: DEMO_USER }),
 

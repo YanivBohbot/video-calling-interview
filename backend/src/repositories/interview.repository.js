@@ -53,6 +53,14 @@ export const createInterviewRepository = ({ prisma }) => ({
   findCodeSnapshot: (id) =>
     prisma.interview.findUnique({ where: { id }, select: { codeSnapshot: true, codeLanguage: true } }),
 
+  findByInviteHash: (inviteTokenHash) =>
+    prisma.interview.findUnique({ where: { inviteTokenHash }, select: { id: true, status: true } }),
+
+  setInviteHash: (id, inviteTokenHash) =>
+    prisma.interview
+      .update({ where: { id }, data: { inviteTokenHash, inviteCreatedAt: new Date() }, select: { id: true } })
+      .catch(notFound),
+
   create: (data) => prisma.interview.create({ data, include: WITH_INTERVIEWER }),
 
   // No include on purpose: this route has always answered with interviewerId as a plain id.
