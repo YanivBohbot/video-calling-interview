@@ -9,6 +9,7 @@ import NewInterview from "./pages/NewInterview";
 import Interviews from "./pages/Interviews";
 import Schedule from "./pages/Schedule";
 import Profile from "./pages/Profile";
+import CandidateRoom from "./pages/CandidateRoom";
 
 function App() {
   const { mode, enterDemo } = useCredentials();
@@ -51,6 +52,8 @@ function App() {
     <Router>
       <Routes>
         {/* Public Routes */}
+        {/* Invited candidate: no sign-in, the invite in the link is the credential. */}
+        <Route path="/room/:id" element={<CandidateRoom />} />
         <Route
           path="/sign-in/*"
           element={
