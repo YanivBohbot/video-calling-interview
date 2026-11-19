@@ -85,6 +85,23 @@ describe("identity resolver", () => {
     expect(principal).toMatchObject({ kind: "interviewer", clerkId: "clerk_grace" });
   });
 
+  it("re-reads the row when the placeholder create also loses a race", async () => {
+    const { ConflictError } = await import("../shared/errors.js");
+    userRepository.findIdentityByClerkId
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "u-raced", clerkId: "clerk_grace" });
+    userRepository.createFromClerk.mockRejectedValue(new ConflictError());
+    expect(await resolver.fromCredentials({ bearer: "clerk:clerk_grace" })).toMatchObject({ userId: "u-raced" });
+  });
+
+  it("does not cache the demo user id (a reseed gives the demo row a new id)", async () => {
+    const { token } = await demoTokens.issue();
+    userRepository.upsertDemoUser.mockResolvedValueOnce({ id: "u-demo-1" }).mockResolvedValueOnce({ id: "u-demo-2" });
+    expect((await resolver.fromCredentials({ bearer: token })).userId).toBe("u-demo-1");
+    expect((await resolver.fromCredentials({ bearer: token })).userId).toBe("u-demo-2");
+  });
+
   it("falls back to a placeholder e-mail when Clerk has none", async () => {
     clerkVerifier.fetchUser.mockResolvedValue({ name: "No Mail", email: null, profileImage: null });
     await resolver.fromCredentials({ bearer: "clerk:clerk_nomail" });

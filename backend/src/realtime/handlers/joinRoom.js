@@ -2,7 +2,15 @@ import { getCurrentQuestion } from "../roomQuestions.js";
 
 export const createJoinRoomHandler = ({ roomState, roomQuestions, findCodeSnapshot, canAccessRoom }) => (socket) => async (roomId) => {
   // Owners may enter their own interviews' rooms, a candidate only the invited one.
-  if (typeof roomId !== "string" || !(await canAccessRoom(socket.data.principal, roomId))) {
+  // Socket.io ignores a listener's promise, so a rejection here would be unhandled and
+  // could take the whole process down: refuse instead.
+  let allowed = false;
+  try {
+    allowed = typeof roomId === "string" && (await canAccessRoom(socket.data.principal, roomId));
+  } catch (err) {
+    console.error(`join-room: access check failed for room ${roomId}:`, err.message);
+  }
+  if (!allowed) {
     socket.emit("error-message", "Forbidden");
     return;
   }

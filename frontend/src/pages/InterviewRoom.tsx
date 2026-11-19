@@ -6,6 +6,7 @@ import {
   SpeakerLayout,
   CallControls,
   StreamTheme,
+  type Call,
 } from '@stream-io/video-react-sdk';
 import { useUser } from '@clerk/clerk-react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -127,8 +128,14 @@ export const InterviewRoom: React.FC = () => {
     setTimeout(() => setInviteCopied(false), 2000);
   };
 
+  // Join the video only once the interview has loaded — the backend serves it to its
+  // owner only — and leave exactly the call/client this effect created.
+  const canJoinVideo = interviewData !== null;
   React.useEffect(() => {
-    if (!id) return;
+    if (!id || !canJoinVideo) return;
+    let cancelled = false;
+    let videoClient: StreamVideoClient | null = null;
+    let joined: Call | null = null;
 
     const initStream = async () => {
       try {
@@ -137,7 +144,7 @@ export const InterviewRoom: React.FC = () => {
         if (!response.ok) throw new Error(`Stream token refused: ${response.status}`);
         const { token, userId } = await response.json();
 
-        const videoClient = new StreamVideoClient({
+        videoClient = new StreamVideoClient({
           apiKey,
           user: {
             id: userId,
@@ -147,11 +154,12 @@ export const InterviewRoom: React.FC = () => {
           token,
         });
 
-        const interviewCall = videoClient.call('default', id);
-        await interviewCall.join({ create: true });
+        joined = videoClient.call('default', id);
+        await joined.join({ create: true });
+        if (cancelled) return;
 
         setClient(videoClient);
-        setCall(interviewCall);
+        setCall(joined);
       } catch (error) {
         console.error('Error joining interview room:', error);
       }
@@ -160,10 +168,11 @@ export const InterviewRoom: React.FC = () => {
     initStream();
 
     return () => {
-      if (call) call.leave();
-      if (client) client.disconnectUser();
+      cancelled = true;
+      joined?.leave().catch(() => {});
+      videoClient?.disconnectUser().catch(() => {});
     };
-  }, [user, id, apiFetch]);
+  }, [user, id, apiFetch, canJoinVideo]);
 
   React.useEffect(() => {
     if (!id) return;

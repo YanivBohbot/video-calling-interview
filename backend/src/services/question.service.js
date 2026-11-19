@@ -10,7 +10,7 @@ import { DEMO } from "../auth/principal.js";
 
 // Generation errors: config problems are shown, provider failures are a 502.
 const toGenerateError = (err) => {
-  if (err instanceof AIConfigError) return new AppError(500, err.message);
+  if (err instanceof AIConfigError) return new AppError(500, "AI is not configured correctly", {}, { cause: err });
   if (err instanceof AIProviderError || err instanceof AIInvalidResponseError) {
     return new UpstreamError("AI service unavailable", { cause: err });
   }

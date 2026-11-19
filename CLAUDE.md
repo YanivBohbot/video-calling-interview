@@ -50,7 +50,7 @@ backend/src/
   container.js     composition root — picks implementations and wires repositories → services → controllers → routes
   config/env.js    loadConfig(env): zod-validated, never logged; failures name variables, never values
   shared/          errors.js (AppError + subclasses), handle.js, errorHandler.js, validate.js (zod middleware), mongoShape.js, prismaErrors.js, stats.js
-  auth/            identity strategies (clerkHeaderStrategy) + requireIdentity middleware
+  auth/            principal kinds, identityResolver (Clerk / demo / invite → principal), authenticate + requireKind middleware, demoTokens, inviteSecrets, clerkVerifier
   routes/          <x>.routes.js       — URL → controller (createXRouter)
   controllers/     <x>.controller.js   — HTTP in/out, Mongo-shaping (createXController)
   services/        <x>.service.js      — business rules, throw AppErrors (createXService)
@@ -63,7 +63,7 @@ backend/src/
   lib/             db.js (prisma singleton), rateLimiter.js, seed.js
 ```
 
-Layer rules: routes wire URLs and request validation (`validate({ body | params | query })` with a schema from `validators/`); controllers read the request, call one service and shape the response (no Prisma); services hold the business rules and throw `AppError`s (no `req`/`res`); repositories are the only Prisma callers and own the `select`/`include` shapes. Every layer is a plain factory taking its dependencies as parameters (`createInterviewService({ interviewRepository, resolveInterviewerId })`), so tests inject fakes instead of using `vi.mock`. `createContainer({ config, prisma, generation?, identityStrategy?, getStreamClient?, now? })` accepts fakes for every external dependency. Controllers wrap each handler in `handle("<fallback message>", fn)`: unexpected errors become a 500 with that generic message and the detail is only logged — never put `err.message` in a response.
+Layer rules: routes wire URLs and request validation (`validate({ body | params | query })` with a schema from `validators/`); controllers read the request, call one service and shape the response (no Prisma); services hold the business rules and throw `AppError`s (no `req`/`res`); repositories are the only Prisma callers and own the `select`/`include` shapes. Every layer is a plain factory taking its dependencies as parameters (`createInterviewService({ interviewRepository, clientUrl })`), so tests inject fakes instead of using `vi.mock`. `createContainer({ config, prisma, generation?, clerkVerifier?, identityResolver?, getStreamClient?, now? })` accepts fakes for every external dependency. Controllers wrap each handler in `handle("<fallback message>", fn)`: unexpected errors become a 500 with that generic message and the detail is only logged — never put `err.message` in a response.
 
 ### The API still speaks Mongo-shaped JSON
 
@@ -97,6 +97,6 @@ Code execution (the "Run" button) calls the public Piston API (`emkc.org`) direc
 
 `App.tsx` reads `useCredentials().mode`: "Continue as Guest" fetches a demo token (kept in `sessionStorage`, survives refresh) and routes around Clerk's `<SignedIn>/<SignedOut>` gates. `/room/:id` (candidate) is public. Any change to the auth flow needs to account for the Clerk path, the demo path and the candidate path.
 
-### In-progress work
+### AI question generator
 
-`docs/superpowers/plans/2026-05-17-ai-question-generator.md` and the paired `specs/` doc describe a planned feature (OpenAI-backed interview question generation, added to `Interview.questions` as a `Json` column). As of now it is docs-only — no `backend/src/lib/ai.js`, no `openai` dependency, no `Interview.questions` field in `schema.prisma`. Check current file/schema state before building on top of it.
+`backend/src/agents/` holds the LangGraph pipeline (planner → researcher → drafter → validator → human approval → finalize) that drafts interview questions, grounded on LeetCode problems through the LeetCode MCP server, and saves approved ones to `Interview.questions` (Json). An audit against the LangChain docs, with the recommended restructuring, is in `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.

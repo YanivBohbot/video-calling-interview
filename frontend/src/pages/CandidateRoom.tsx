@@ -31,8 +31,11 @@ type CandidateRoomData = {
 const takeInviteFromUrl = (interviewId: string): string | null => {
   const match = window.location.hash.match(/(?:^#|&)invite=([A-Za-z0-9_-]+)/);
   if (match) {
+    // Stored for refreshes; returned directly so a browser that blocks sessionStorage
+    // still gets in on this load.
     storeInvite(interviewId, match[1]);
     window.history.replaceState(null, '', window.location.pathname);
+    return match[1];
   }
   return readInvite(interviewId);
 };

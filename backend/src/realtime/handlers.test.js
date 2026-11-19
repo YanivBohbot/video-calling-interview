@@ -181,6 +181,15 @@ describe("room access", () => {
     expect(socket.rooms.has("iv-1")).toBe(true);
   });
 
+  it("refuses (instead of crashing the server) when the access check itself fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    ctx.canAccessRoom.mockRejectedValue(new Error("db down"));
+    const socket = fakeSocket();
+    await expect(createJoinRoomHandler(ctx)(socket)("iv-1")).resolves.toBeUndefined();
+    expect(socket.rooms.has("iv-1")).toBe(false);
+    expect(events).toEqual([["self", "error-message", "Forbidden"]]);
+  });
+
   it("ignores question-change from a candidate", () => {
     const socket = fakeSocket("s9", candidate);
     socket.rooms.add("iv-1");

@@ -83,13 +83,13 @@ describe("POST /api/interviews/:id/questions/generate", () => {
     expect(res.body).toEqual({ message: "AI service unavailable" });
   });
 
-  it("surfaces an AIConfigError as a 500 with its message", async () => {
+  it("answers an AIConfigError with a fixed 500 message, never the internal detail", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     interviewRepository.findById.mockResolvedValue({ id: "iv-1", interviewerId: "u-ada", role: "x", interviewType: "technical" });
     generation.start.mockRejectedValue(new AIConfigError("AI_MODEL is not a supported model"));
     const res = await generate("iv-1");
     expect(res.status).toBe(500);
-    expect(res.body).toEqual({ message: "AI_MODEL is not a supported model" });
+    expect(res.body).toEqual({ message: "AI is not configured correctly" });
   });
 
   it("returns 200 with jobId/draftQuestions/plan on success", async () => {

@@ -7,11 +7,11 @@ const CLOSED_STATUSES = new Set(["completed", "cancelled"]);
 // Turns credentials into a principal (see principal.js), or null when there is none.
 // Order: bearer → demo token (local check) → Clerk session; otherwise invite secret.
 export const createIdentityResolver = ({ clerkVerifier, demoTokens, userRepository, interviewRepository }) => {
-  let demoUserId; // the demo row never changes once created
-
+  // Looked up on every demo request (one indexed upsert): caching the id would go stale
+  // when the database is reseeded while the server runs.
   const demoPrincipal = async () => {
-    demoUserId ??= (await userRepository.upsertDemoUser()).id;
-    return { kind: DEMO, userId: demoUserId, clerkId: "demo" };
+    const { id } = await userRepository.upsertDemoUser();
+    return { kind: DEMO, userId: id, clerkId: "demo" };
   };
 
   // A Clerk user may not have a row yet (first visit): create it from Clerk's profile.
@@ -27,7 +27,15 @@ export const createIdentityResolver = ({ clerkVerifier, demoTokens, userReposito
       if (!(err instanceof ConflictError)) throw err;
       const raced = await userRepository.findIdentityByClerkId(clerkId);
       if (raced) return raced;
-      return userRepository.createFromClerk({ clerkId, name, email: placeholder, profileImage });
+      try {
+        return await userRepository.createFromClerk({ clerkId, name, email: placeholder, profileImage });
+      } catch (retryErr) {
+        // A parallel request won the placeholder create too: its row is the one to use.
+        if (!(retryErr instanceof ConflictError)) throw retryErr;
+        const winner = await userRepository.findIdentityByClerkId(clerkId);
+        if (winner) return winner;
+        throw retryErr;
+      }
     }
   };
 
