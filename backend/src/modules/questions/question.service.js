@@ -7,15 +7,19 @@ import {
 import { AppError, NotFoundError, RateLimitError, UpstreamError, ValidationError } from "../../shared/errors.js";
 import { validateQuestionsPayload } from "./question.validation.js";
 
-// Maps the agent pipeline's errors onto API errors; anything else stays unexpected.
-const toApiError = (err) => {
+// Generation errors: config problems are shown, provider failures are a 502.
+const toGenerateError = (err) => {
   if (err instanceof AIConfigError) return new AppError(500, err.message);
   if (err instanceof AIProviderError || err instanceof AIInvalidResponseError) {
     return new UpstreamError("AI service unavailable", { cause: err });
   }
-  if (err instanceof UnknownJobError) return new NotFoundError("No pending approval for this job");
   return err;
 };
+
+// Approval errors: only an unknown/resolved job is meaningful to the client; any other
+// failure stays unexpected (500 "Failed to resolve approval"), as it always has.
+const toApproveError = (err) =>
+  err instanceof UnknownJobError ? new NotFoundError("No pending approval for this job") : err;
 
 // AI question generation with a human approval step.
 // `generation` is { start, resume } from the LangGraph pipeline (injected, so tests fake it).
@@ -38,7 +42,7 @@ export const createQuestionService = ({ interviewRepository, generation, rateLim
       });
       return { jobId, status: "pending_approval", draftQuestions, plan };
     } catch (err) {
-      throw toApiError(err);
+      throw toGenerateError(err);
     }
   };
 
@@ -64,7 +68,7 @@ export const createQuestionService = ({ interviewRepository, generation, rateLim
         questions: approved ? questions : undefined,
       });
     } catch (err) {
-      throw toApiError(err);
+      throw toApproveError(err);
     }
     if (!result.approved) return { status: "rejected" };
 

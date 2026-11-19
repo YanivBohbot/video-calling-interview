@@ -41,6 +41,14 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...base, PORT: "not-a-SECRET-port" })).not.toThrow(/SECRET/);
   });
 
+  it("treats blank values (e.g. copied from .env.example) as absent", () => {
+    const config = loadConfig({ ...base, OPENAI_API_KEY: "", STREAM_API_SECRET: "", PORT: "", AI_QUESTION_COUNT: "" });
+    expect(config.port).toBe(3000);
+    expect(config.aiQuestionCount).toBe(6);
+    expect(config.openaiApiKey).toBeUndefined();
+    expect(config.stream.apiSecret).toBeUndefined();
+  });
+
   it("returns a frozen object", () => {
     expect(Object.isFrozen(loadConfig(base))).toBe(true);
   });

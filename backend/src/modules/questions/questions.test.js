@@ -167,6 +167,17 @@ describe("POST /api/interviews/:id/questions/approve", () => {
     expect(interviewRepository.findByIdWithInterviewer).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["an AIProviderError", () => new AIProviderError("resume blew up")],
+    ["an AIConfigError", () => new AIConfigError("bad model")],
+  ])("keeps the historical 500 Failed to resolve approval for %s during resume", async (_label, makeErr) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    generation.resume.mockRejectedValue(makeErr());
+    const res = await approve({ jobId: "iv-1:abc", approved: true });
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: "Failed to resolve approval" });
+  });
+
   it("returns { status: 'rejected' } and does not look up the interview on reject", async () => {
     generation.resume.mockResolvedValue({ approved: false });
     const res = await approve({ jobId: "iv-1:abc", approved: false });

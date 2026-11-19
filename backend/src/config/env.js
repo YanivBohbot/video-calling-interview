@@ -1,12 +1,15 @@
 import { z } from "zod";
 
-const optional = z.string().min(1).optional();
+// A blank value (`KEY=` in .env) means "not set", as it did before config validation.
+const blankAsUnset = (schema) => z.preprocess((v) => (v === "" ? undefined : v), schema);
+
+const optional = blankAsUnset(z.string().min(1).optional());
 
 const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   CLIENT_URL: z.string().min(1),
-  PORT: z.coerce.number().int().positive().default(3000),
-  AI_QUESTION_COUNT: z.coerce.number().int().positive().default(6),
+  PORT: blankAsUnset(z.coerce.number().int().positive().default(3000)),
+  AI_QUESTION_COUNT: blankAsUnset(z.coerce.number().int().positive().default(6)),
   OPENAI_API_KEY: optional,
   STREAM_API_KEY: optional,
   STREAM_API_SECRET: optional,
