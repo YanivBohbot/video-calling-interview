@@ -20,13 +20,9 @@ const DEMO_USER = { name: "Demo User", email: "demo@talentiq.dev", clerkId: "dem
 
 // Data access for users. The only layer that talks to Prisma.
 export const createUserRepository = ({ prisma }) => ({
-  findAll: () => prisma.user.findMany({ orderBy: { createdAt: "desc" }, select: USER_SELECT }),
-
   findByClerkId: (clerkId) => prisma.user.findUnique({ where: { clerkId }, select: USER_SELECT }),
 
   findIdentityByClerkId: (clerkId) => prisma.user.findUnique({ where: { clerkId }, select: IDENTITY_SELECT }),
-
-  create: (data) => prisma.user.create({ data, select: USER_SELECT }).catch(translatePrismaError),
 
   upsertProfile: (clerkId, { update, create }) =>
     prisma.user.upsert({ where: { clerkId }, update, create, select: USER_SELECT }).catch(translatePrismaError),

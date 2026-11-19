@@ -1,14 +1,15 @@
 import express from "express";
 import { validate } from "../shared/validate.js";
-import { createUserBody, updateProfileBody } from "../validators/user.schemas.js";
+import { requireKind } from "../auth/middleware.js";
+import { DEMO, INTERVIEWER } from "../auth/principal.js";
+import { updateProfileBody } from "../validators/user.schemas.js";
 
+// Only the caller's own profile: /me. Candidates have no profile.
 export const createUserRouter = ({ userController }) => {
   const router = express.Router();
-  router.get("/", userController.list);
-  router.post("/", validate({ body: createUserBody }), userController.create);
-  // Profile endpoints — must come before any /:id route to avoid shadowing.
-  router.get("/by-clerk/:clerkId", userController.getByClerkId);
-  router.put("/by-clerk/:clerkId", validate({ body: updateProfileBody }), userController.update);
-  router.get("/by-clerk/:clerkId/stats", userController.stats);
+  router.use(requireKind(INTERVIEWER, DEMO));
+  router.get("/me", userController.getMe);
+  router.put("/me", validate({ body: updateProfileBody }), userController.updateMe);
+  router.get("/me/stats", userController.myStats);
   return router;
 };

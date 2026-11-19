@@ -1,31 +1,23 @@
 import { ConflictError, NotFoundError, ValidationError } from "../shared/errors.js";
 import { averageDuration } from "../shared/stats.js";
 
-const ZERO_STATS = { total: 0, completed: 0, scheduled: 0, cancelled: 0, live: 0, avgDuration: 0 };
-
 const renameConflict = (message) => (err) => {
   if (err instanceof ConflictError) throw new ConflictError(message);
   throw err;
 };
 
+// The caller's own profile. Rows are created on first sign-in (identity resolver) or,
+// for the demo account, by the demo login — there is no public user creation anymore.
 export const createUserService = ({ userRepository }) => {
-  const createUser = ({ name, email, clerkID, profileImage } = {}) => {
-    if (!name || !email || !clerkID) {
-      return Promise.reject(new ValidationError("Missing required user fields"));
-    }
-    return userRepository
-      .create({ name, email, clerkId: clerkID, profileImage })
-      .catch(renameConflict("User exists"));
-  };
-
-  const getByClerkId = async (clerkId) => {
-    const user = await userRepository.findByClerkId(clerkId);
+  const getMe = async (principal) => {
+    const user = await userRepository.findByClerkId(principal.clerkId);
     if (!user) throw new NotFoundError("User not found");
     return user;
   };
 
-  const updateProfile = (clerkId, { name, email, title, bio, phone, timezone, profileImage } = {}) => {
+  const updateMe = (principal, { name, email, title, bio, phone, timezone, profileImage } = {}) => {
     if (!name) return Promise.reject(new ValidationError("Name is required"));
+    const { clerkId } = principal;
     const fields = {
       name,
       title: title || "",
@@ -42,27 +34,10 @@ export const createUserService = ({ userRepository }) => {
       .catch(renameConflict("Email already in use"));
   };
 
-  const getStats = async (clerkId) => {
-    const user = await userRepository.findByClerkId(clerkId);
-    if (!user) return { ...ZERO_STATS };
-    const { durations, ...counts } = await userRepository.countInterviewStats(user.id);
+  const getMyStats = async (principal) => {
+    const { durations, ...counts } = await userRepository.countInterviewStats(principal.userId);
     return { ...counts, avgDuration: averageDuration(durations) };
   };
 
-  // Maps a raw clerk id from a request to the internal user id ("demo" = Guest Mode).
-  const resolveInterviewerId = async (raw) => {
-    if (!raw) return null;
-    if (raw === "demo") return (await userRepository.upsertDemoUser()).id;
-    const user = await userRepository.findByClerkId(raw);
-    return user?.id ?? null;
-  };
-
-  return {
-    listUsers: () => userRepository.findAll(),
-    createUser,
-    getByClerkId,
-    updateProfile,
-    getStats,
-    resolveInterviewerId,
-  };
+  return { getMe, updateMe, getMyStats };
 };

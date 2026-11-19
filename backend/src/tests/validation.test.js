@@ -86,30 +86,24 @@ describe("users", () => {
   it("accepts the Profile page's save, including null fields", async () => {
     prisma.user.upsert.mockResolvedValue({ id: "u1", clerkId: "c1", name: "Ada" });
     const res = await request(app)
-      .put("/api/users/by-clerk/c1")
+      .put("/api/users/me")
       .send({ name: "Ada", title: null, bio: "", phone: null, timezone: "UTC", email: null });
     expect(res.status).toBe(200);
   });
 
   it("rejects a non-string name on profile save", async () => {
-    const res = await request(app).put("/api/users/by-clerk/c1").send({ name: 42 });
+    const res = await request(app).put("/api/users/me").send({ name: 42 });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ message: "Name is required" });
   });
 
   it("rejects a non-string profile field", async () => {
-    const res = await request(app).put("/api/users/by-clerk/c1").send({ name: "Ada", bio: { html: "<b>" } });
+    const res = await request(app).put("/api/users/me").send({ name: "Ada", bio: { html: "<b>" } });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ message: "Invalid bio" });
     expect(prisma.user.upsert).not.toHaveBeenCalled();
   });
 
-  it("rejects a user creation with a non-string email", async () => {
-    const res = await request(app).post("/api/users").send({ name: "A", email: 5, clerkID: "c" });
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: "Missing required user fields" });
-    expect(prisma.user.create).not.toHaveBeenCalled();
-  });
 });
 
 describe("questions and stream", () => {
