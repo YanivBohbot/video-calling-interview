@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Video, 
@@ -11,7 +11,8 @@ import {
   Menu,
   X
 } from 'lucide-react';
-import { UserButton } from '@clerk/clerk-react';
+import { UserButton, useClerk } from '@clerk/clerk-react';
+import { useCredentials } from '../lib/credentials';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const SidebarLink = ({ to, icon: Icon, label, active }: { to: string, icon: any, label: string, active: boolean }) => (
@@ -30,6 +31,19 @@ const SidebarLink = ({ to, icon: Icon, label, active }: { to: string, icon: any,
 
 export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const { mode, leaveDemo } = useCredentials();
+  const { signOut } = useClerk();
+  const navigate = useNavigate();
+
+  // Demo visitors just drop their demo token; Clerk users sign out of Clerk.
+  const signOutEverywhere = async () => {
+    if (mode === 'demo') {
+      leaveDemo();
+      navigate('/sign-in');
+    } else {
+      await signOut({ redirectUrl: '/sign-in' });
+    }
+  };
   const location = useLocation();
 
   const navItems = [
@@ -65,7 +79,10 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
           </nav>
 
           <div className="pt-6 mt-10 border-t border-slate-100">
-            <button className="flex w-full items-center gap-3 px-4 py-3 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors">
+            <button
+              onClick={signOutEverywhere}
+              className="flex w-full items-center gap-3 px-4 py-3 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors"
+            >
               <LogOut size={20} />
               <span className="font-medium">Sign Out</span>
             </button>

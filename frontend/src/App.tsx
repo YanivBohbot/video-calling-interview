@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useCredentials } from "./lib/credentials";
 import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { DashboardLayout } from "./layouts/DashboardLayout";
@@ -10,7 +11,18 @@ import Schedule from "./pages/Schedule";
 import Profile from "./pages/Profile";
 
 function App() {
-  const [isDemo, setIsDemo] = useState(false);
+  const { mode, enterDemo } = useCredentials();
+  const isDemo = mode === "demo";
+  const [demoError, setDemoError] = useState<string | null>(null);
+
+  const continueAsGuest = async () => {
+    setDemoError(null);
+    try {
+      await enterDemo();
+    } catch {
+      setDemoError("Demo mode is unavailable right now. Please try again.");
+    }
+  };
 
   // Helper to render the protected content
   const ProtectedRoutes = () => (
@@ -81,11 +93,12 @@ function App() {
 
               {/* Developer Bypass */}
               <button 
-                onClick={() => setIsDemo(true)}
+                onClick={continueAsGuest}
                 className="mt-8 text-white/60 hover:text-white text-sm font-medium transition-colors underline underline-offset-4 relative z-10"
               >
                 Continue as Guest (Demo Mode)
               </button>
+              {demoError && <p className="mt-3 text-sm text-red-200 relative z-10">{demoError}</p>}
             </div>
           }
         />
