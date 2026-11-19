@@ -1,5 +1,6 @@
 import { CANDIDATE, DEMO, INTERVIEWER } from "./principal.js";
 import { hashInviteSecret } from "./inviteSecrets.js";
+import { ConflictError } from "../shared/errors.js";
 
 const CLOSED_STATUSES = new Set(["completed", "cancelled"]);
 
@@ -14,17 +15,24 @@ export const createIdentityResolver = ({ clerkVerifier, demoTokens, userReposito
   };
 
   // A Clerk user may not have a row yet (first visit): create it from Clerk's profile.
-  const interviewerPrincipal = async (clerkId) => {
-    let user = await userRepository.findIdentityByClerkId(clerkId);
-    if (!user) {
-      const { name, email, profileImage } = await clerkVerifier.fetchUser(clerkId);
-      user = await userRepository.createFromClerk({
-        clerkId,
-        name,
-        email: email || `${clerkId}@talentiq.dev`,
-        profileImage,
-      });
+  // The dashboard fires several requests at once, so creation can race: a unique-constraint
+  // conflict means either a parallel request created the row (re-read it) or the e-mail
+  // already belongs to another row (create with the placeholder e-mail instead).
+  const provision = async (clerkId) => {
+    const { name, email, profileImage } = await clerkVerifier.fetchUser(clerkId);
+    const placeholder = `${clerkId}@talentiq.dev`;
+    try {
+      return await userRepository.createFromClerk({ clerkId, name, email: email || placeholder, profileImage });
+    } catch (err) {
+      if (!(err instanceof ConflictError)) throw err;
+      const raced = await userRepository.findIdentityByClerkId(clerkId);
+      if (raced) return raced;
+      return userRepository.createFromClerk({ clerkId, name, email: placeholder, profileImage });
     }
+  };
+
+  const interviewerPrincipal = async (clerkId) => {
+    const user = (await userRepository.findIdentityByClerkId(clerkId)) ?? (await provision(clerkId));
     return { kind: INTERVIEWER, userId: user.id, clerkId };
   };
 

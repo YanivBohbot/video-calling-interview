@@ -61,6 +61,30 @@ describe("identity resolver", () => {
     expect(principal).toEqual({ kind: "interviewer", userId: "u-new", clerkId: "clerk_grace" });
   });
 
+  it("survives concurrent first requests: a lost create race re-reads the row", async () => {
+    const { ConflictError } = await import("../shared/errors.js");
+    userRepository.findIdentityByClerkId
+      .mockResolvedValueOnce(null) // not there yet…
+      .mockResolvedValueOnce({ id: "u-raced", clerkId: "clerk_grace" }); // …created by the parallel request
+    userRepository.createFromClerk.mockRejectedValueOnce(new ConflictError());
+    expect(await resolver.fromCredentials({ bearer: "clerk:clerk_grace" })).toEqual({
+      kind: "interviewer",
+      userId: "u-raced",
+      clerkId: "clerk_grace",
+    });
+  });
+
+  it("falls back to a placeholder e-mail when the Clerk e-mail already belongs to another row", async () => {
+    const { ConflictError } = await import("../shared/errors.js");
+    userRepository.findIdentityByClerkId.mockResolvedValue(null);
+    userRepository.createFromClerk.mockRejectedValueOnce(new ConflictError());
+    const principal = await resolver.fromCredentials({ bearer: "clerk:clerk_grace" });
+    expect(userRepository.createFromClerk).toHaveBeenLastCalledWith(
+      expect.objectContaining({ clerkId: "clerk_grace", email: "clerk_grace@talentiq.dev" }),
+    );
+    expect(principal).toMatchObject({ kind: "interviewer", clerkId: "clerk_grace" });
+  });
+
   it("falls back to a placeholder e-mail when Clerk has none", async () => {
     clerkVerifier.fetchUser.mockResolvedValue({ name: "No Mail", email: null, profileImage: null });
     await resolver.fromCredentials({ bearer: "clerk:clerk_nomail" });
