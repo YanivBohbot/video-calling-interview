@@ -78,6 +78,18 @@ describe("loadConfig", () => {
     expect(config.demoTokenSecret).toBe("test-demo-secret-0123456789abcdef0123");
   });
 
+  it("defaults the AI models to full provider:model strings", () => {
+    const config = loadConfig(base);
+    expect(config.aiModel).toBe("openai:gpt-4o-mini");
+    expect(config.aiModelFallback).toBe("openai:gpt-4o");
+  });
+
+  it("keeps provider:model strings and treats a bare model name as OpenAI (older .env files)", () => {
+    const config = loadConfig({ ...base, AI_MODEL: "anthropic:claude-sonnet-5", AI_MODEL_FALLBACK: "gpt-4o" });
+    expect(config.aiModel).toBe("anthropic:claude-sonnet-5");
+    expect(config.aiModelFallback).toBe("openai:gpt-4o");
+  });
+
   it("returns a frozen object", () => {
     expect(Object.isFrozen(loadConfig(base))).toBe(true);
   });

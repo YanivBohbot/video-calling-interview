@@ -7,8 +7,6 @@ import { createApp } from "./app.js";
 import { attachRealtime } from "./realtime/index.js";
 import { createSocketAuthenticator } from "./realtime/authenticateSocket.js";
 import { createRoomAccess } from "./realtime/roomAccess.js";
-import { getLeetCodeTools } from "./agents/leetcodeMcpClient.js";
-import { ensureCheckpointerTables } from "./agents/questionGenerator/graph.js";
 
 let config;
 try {
@@ -37,6 +35,7 @@ const shutdown = async (signal) => {
   console.log(`${signal} received — saving open rooms and shutting down`);
   try {
     await realtime.shutdown(); // closes the sockets and, with them, the HTTP server
+    await container.ai.close(); // stops the LeetCode MCP child process
     await prisma.$disconnect();
     process.exit(0);
   } catch (err) {
@@ -54,11 +53,11 @@ const startServer = async () => {
   });
   // Warm the LeetCode MCP connection at boot (fire-and-forget) so the npx download and
   // stdio handshake happen now, not on the first user-facing generate request.
-  // getLeetCodeTools never rejects; it resolves to [] on failure and retries on next call.
-  getLeetCodeTools().catch(() => {});
+  // It never rejects; it resolves to [] on failure and retries on the next call.
+  container.ai.warmUp().catch(() => {});
   // Idempotent: creates the LangGraph checkpointer's Postgres tables if missing. Best-effort —
   // a slow DB at boot must not crash the server; generation will then fail per-request instead.
-  ensureCheckpointerTables().catch((err) => console.error("Checkpointer setup failed:", err.message));
+  container.ai.setup().catch((err) => console.error("Checkpointer setup failed:", err.message));
 };
 
 startServer().catch((err) => {

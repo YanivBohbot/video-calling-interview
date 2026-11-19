@@ -1,28 +1,27 @@
 import { describe, it, expect, vi } from "vitest";
 import { MemorySaver } from "@langchain/langgraph";
-import { buildGraph, startQuestionGeneration, resumeQuestionGeneration, getCheckpointer } from "./graph.js";
-import { AIInvalidResponseError, UnknownJobError } from "./errors.js";
+import { buildGraph } from "./graph.js";
+import { createQuestionGenerator } from "./runner.js";
+import { AIConfigError, AIInvalidResponseError, UnknownJobError } from "./errors.js";
 
 const goodQuestions = [
   { text: "Explain closures", category: "technical", difficulty: "medium" },
   { text: "Describe a conflict you resolved", category: "behavioral", difficulty: "easy" },
 ];
 
+// `update` stands in for interviewRepository.saveQuestions(interviewId, questions).
 const makeDeps = ({ draftQuestions = goodQuestions, update = vi.fn().mockResolvedValue({}) } = {}) => ({
   checkpointer: new MemorySaver(),
   chooseSearch: async () => ({ category: "algorithms", tags: [], difficulty: "MEDIUM" }),
   searchProblems: async () => [],
-  buildDrafterAgent: async () => ({
-    invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: draftQuestions } }),
-  }),
-  prismaClient: { interview: { update } },
+  draft: async () => ({ questions: draftQuestions }),
+  saveQuestions: update,
 });
 
-describe("checkpointer", () => {
-  it("keeps its tables out of the Prisma-managed public schema", () => {
-    expect(getCheckpointer().options.schema).toBe("langgraph");
-  });
-});
+// The public API (start/resume) over a real compiled graph with fake collaborators.
+const generatorFor = (graph) => createQuestionGenerator({ graph });
+const startQuestionGeneration = (args, { graph }) => generatorFor(graph).start(args);
+const resumeQuestionGeneration = (args, { graph }) => generatorFor(graph).resume(args);
 
 describe("question generator graph", () => {
   it("runs to the human approval interrupt and returns the draft", async () => {
@@ -48,7 +47,7 @@ describe("question generator graph", () => {
       { graph },
     );
     expect(result).toEqual({ approved: true });
-    expect(update).toHaveBeenCalledWith({ where: { id: "iv-2" }, data: { questions: goodQuestions } });
+    expect(update).toHaveBeenCalledWith("iv-2", goodQuestions);
   });
 
   it("does not write to the database on reject", async () => {
@@ -114,7 +113,7 @@ describe("question generator graph", () => {
       { graph },
     );
     expect(result).toEqual({ approved: true });
-    expect(update).toHaveBeenLastCalledWith({ where: { id: "iv-9" }, data: { questions: goodQuestions } });
+    expect(update).toHaveBeenLastCalledWith("iv-9", goodQuestions);
   });
 
   it("reaches fallback then throws AIInvalidResponseError when the draft is always invalid", async () => {
@@ -125,5 +124,12 @@ describe("question generator graph", () => {
         { graph },
       ),
     ).rejects.toBeInstanceOf(AIInvalidResponseError);
+  });
+
+  it("lets a model configuration error reach the API as AIConfigError", async () => {
+    const graph = buildGraph({ ...makeDeps(), draft: async () => { throw new AIConfigError("bad model"); } });
+    await expect(
+      startQuestionGeneration({ interviewId: "iv-10", role: "x", interviewType: "technical", count: 2 }, { graph }),
+    ).rejects.toBeInstanceOf(AIConfigError);
   });
 });

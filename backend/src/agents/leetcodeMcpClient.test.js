@@ -1,89 +1,77 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getLeetCodeTools, _resetLeetCodeToolsCache } from "./leetcodeMcpClient.js";
+import { createLeetCodeTools, LEETCODE_MCP_PACKAGE } from "./leetcodeMcpClient.js";
 
-const makeMockClient = (tools) => ({
-  getTools: vi.fn().mockResolvedValue(tools),
-});
+const healthyClient = (tools) => ({ getTools: vi.fn().mockResolvedValue(tools), close: vi.fn().mockResolvedValue() });
+const failingClient = (message) => ({ getTools: vi.fn().mockRejectedValue(new Error(message)), close: vi.fn().mockResolvedValue() });
 
-const makeFailingClient = (message) => ({
-  getTools: vi.fn().mockRejectedValue(new Error(message)),
-});
-
-describe("getLeetCodeTools", () => {
+describe("LeetCode MCP tools", () => {
   beforeEach(() => {
-    _resetLeetCodeToolsCache();
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
+  afterEach(() => vi.restoreAllMocks());
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it("pins the MCP server version (no unpinned runtime download)", () => {
+    expect(LEETCODE_MCP_PACKAGE).toMatch(/^@jinzcdev\/leetcode-mcp-server@\d+\.\d+\.\d+$/);
   });
 
   it("filters the server's tools down to the allowlist", async () => {
-    const client = makeMockClient([
+    const client = healthyClient([
       { name: "get_daily_challenge" },
       { name: "search_problems" },
       { name: "get_problem" },
       { name: "get_user_profile" }, // not allowlisted — requires nothing we want to expose
       { name: "get_all_submissions" }, // not allowlisted — auth-required
     ]);
-
-    const tools = await getLeetCodeTools({ client });
-
-    expect(tools.map((t) => t.name).sort()).toEqual([
-      "get_daily_challenge",
-      "get_problem",
-      "search_problems",
-    ]);
+    const tools = await createLeetCodeTools({ createClient: () => client }).getTools();
+    expect(tools.map((t) => t.name).sort()).toEqual(["get_daily_challenge", "get_problem", "search_problems"]);
   });
 
   it("returns an empty array without throwing when the connection fails", async () => {
-    const client = makeFailingClient("spawn ENOENT");
-    await expect(getLeetCodeTools({ client })).resolves.toEqual([]);
+    const leetcode = createLeetCodeTools({ createClient: () => failingClient("spawn ENOENT") });
+    await expect(leetcode.getTools()).resolves.toEqual([]);
   });
 
   it("memoizes the result — only fetches tools once across multiple calls", async () => {
-    const client = makeMockClient([{ name: "search_problems" }]);
-
-    await getLeetCodeTools({ client });
-    await getLeetCodeTools({ client });
-
+    const client = healthyClient([{ name: "search_problems" }]);
+    const leetcode = createLeetCodeTools({ createClient: () => client });
+    await leetcode.getTools();
+    await leetcode.getTools();
     expect(client.getTools).toHaveBeenCalledOnce();
   });
 
-  it("does not cache a failed connection — the next call retries and can succeed", async () => {
-    const failing = makeFailingClient("npx download timed out");
-    await expect(getLeetCodeTools({ client: failing })).resolves.toEqual([]);
-
-    const healthy = makeMockClient([{ name: "get_problem" }, { name: "get_user_profile" }]);
-    const tools = await getLeetCodeTools({ client: healthy });
-
-    expect(healthy.getTools).toHaveBeenCalledOnce();
-    expect(tools.map((t) => t.name)).toEqual(["get_problem"]);
+  it("does not cache a failed connection — the next call retries with a fresh client", async () => {
+    const healthy = healthyClient([{ name: "get_problem" }, { name: "get_user_profile" }]);
+    const createClient = vi.fn().mockReturnValueOnce(failingClient("npx download timed out")).mockReturnValueOnce(healthy);
+    const leetcode = createLeetCodeTools({ createClient });
+    await expect(leetcode.getTools()).resolves.toEqual([]);
+    expect((await leetcode.getTools()).map((t) => t.name)).toEqual(["get_problem"]);
+    expect(createClient).toHaveBeenCalledTimes(2);
   });
 
   it("does not cache a failure even when the client throws synchronously", async () => {
-    const throwing = {
-      getTools: vi.fn(() => {
-        throw new Error("spawn npx ENOENT");
-      }),
-    };
-    await expect(getLeetCodeTools({ client: throwing })).resolves.toEqual([]);
+    const throwing = { getTools: vi.fn(() => { throw new Error("spawn npx ENOENT"); }), close: vi.fn() };
+    const createClient = vi.fn().mockReturnValueOnce(throwing).mockReturnValueOnce(healthyClient([{ name: "search_problems" }]));
+    const leetcode = createLeetCodeTools({ createClient });
+    await expect(leetcode.getTools()).resolves.toEqual([]);
+    expect((await leetcode.getTools()).map((t) => t.name)).toEqual(["search_problems"]);
+  });
 
-    const healthy = makeMockClient([{ name: "search_problems" }]);
-    const tools = await getLeetCodeTools({ client: healthy });
+  it("closes the MCP client (stops the child process) on shutdown", async () => {
+    const client = healthyClient([{ name: "search_problems" }]);
+    const leetcode = createLeetCodeTools({ createClient: () => client });
+    await leetcode.getTools();
+    await leetcode.close();
+    expect(client.close).toHaveBeenCalledOnce();
+  });
 
-    expect(tools.map((t) => t.name)).toEqual(["search_problems"]);
+  it("close() is a no-op when nothing was started", async () => {
+    await expect(createLeetCodeTools({ createClient: vi.fn() }).close()).resolves.toBeUndefined();
   });
 
   it("logs the names of the tools that loaded", async () => {
-    const client = makeMockClient([{ name: "search_problems" }, { name: "get_user_profile" }]);
-
-    await getLeetCodeTools({ client });
-
-    expect(console.log).toHaveBeenCalledWith("leetcodeMcpClient: loaded tools:", [
-      "search_problems",
-    ]);
+    const client = healthyClient([{ name: "search_problems" }, { name: "get_user_profile" }]);
+    await createLeetCodeTools({ createClient: () => client }).getTools();
+    expect(console.log).toHaveBeenCalledWith("leetcodeMcpClient: loaded tools:", ["search_problems"]);
   });
 });

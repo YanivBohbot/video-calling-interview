@@ -1,6 +1,11 @@
 import { StreamClient } from "@stream-io/node-sdk";
 import { createRateLimiter } from "./lib/rateLimiter.js";
-import { startQuestionGeneration, resumeQuestionGeneration } from "./agents/questionGenerator/graph.js";
+import { createLeetCodeTools } from "./agents/leetcodeMcpClient.js";
+import { createQuestionModels } from "./agents/questionGenerator/models.js";
+import { createSearchProblems } from "./agents/questionGenerator/leetcodeSearch.js";
+import { createCheckpointer } from "./agents/questionGenerator/checkpointer.js";
+import { buildGraph } from "./agents/questionGenerator/graph.js";
+import { createQuestionGenerator } from "./agents/questionGenerator/runner.js";
 import { createClerkVerifier } from "./auth/clerkVerifier.js";
 import { createDemoTokens } from "./auth/demoTokens.js";
 import { createIdentityResolver } from "./auth/identityResolver.js";
@@ -40,12 +45,14 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 //
 // The optional parameters let tests swap an external dependency for a fake
 // (AI pipeline, Clerk, Stream client, clock) while keeping everything else real.
+// `ai.createMcpClient` replaces the LeetCode MCP client (tests).
 // `identityResolver` replaces the whole credential check — HTTP tests use it to act as a
 // given principal without minting real tokens (the real resolver has its own tests).
 export const createContainer = ({
   config,
   prisma,
-  generation = { start: startQuestionGeneration, resume: resumeQuestionGeneration },
+  generation,
+  ai: aiOptions = {},
   clerkVerifier,
   identityResolver,
   getStreamClient,
@@ -56,6 +63,37 @@ export const createContainer = ({
     session: createSessionRepository({ prisma }),
     user: createUserRepository({ prisma }),
     interview: createInterviewRepository({ prisma }),
+  };
+
+  // ── AI question generator (built on first use: MCP child process, Postgres
+  //    checkpointer and models are only created when someone generates) ──────
+  let aiStack;
+  const getAi = () => {
+    if (!aiStack) {
+      const leetcode = createLeetCodeTools({ createClient: aiOptions.createMcpClient });
+      const models = createQuestionModels({ model: config.aiModel, fallbackModel: config.aiModelFallback });
+      const checkpointer = createCheckpointer({ connectionString: config.databaseUrl });
+      const graph = buildGraph({
+        checkpointer,
+        chooseSearch: models.chooseSearch,
+        searchProblems: createSearchProblems({ getTools: leetcode.getTools }),
+        draft: models.draft,
+        saveQuestions: repositories.interview.saveQuestions,
+      });
+      aiStack = { leetcode, checkpointer, generator: createQuestionGenerator({ graph }) };
+    }
+    return aiStack;
+  };
+  const ai = {
+    // Boot: create the checkpointer tables and warm the LeetCode MCP connection.
+    setup: () => getAi().checkpointer.setup(),
+    warmUp: () => getAi().leetcode.getTools(),
+    // Shutdown: stop the MCP child process if it was started.
+    close: async () => aiStack?.leetcode.close(),
+  };
+  const questionGeneration = generation ?? {
+    start: (args) => getAi().generator.start(args),
+    resume: (args) => getAi().generator.resume(args),
   };
 
   // ── Identity: Clerk sessions, demo tokens, candidate invites → principal ───
@@ -83,7 +121,7 @@ export const createContainer = ({
     interview: createInterviewService({ interviewRepository: repositories.interview, clientUrl: config.clientUrl }),
     question: createQuestionService({
       interviewRepository: repositories.interview,
-      generation,
+      generation: questionGeneration,
       rateLimiter: createRateLimiter({ max: AI_GENERATIONS_PER_HOUR, windowMs: ONE_HOUR_MS }),
       demoRateLimiter: createRateLimiter({ max: DEMO_AI_GENERATIONS_PER_HOUR, windowMs: ONE_HOUR_MS }),
       config,
@@ -117,5 +155,5 @@ export const createContainer = ({
     stream: createStreamRouter({ streamController: controllers.stream }),
   };
 
-  return { config, prisma, auth, repositories, services, controllers, routers };
+  return { config, prisma, auth, ai, repositories, services, controllers, routers };
 };

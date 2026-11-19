@@ -75,29 +75,20 @@ export const makeResearcherNode = ({ chooseSearch, searchProblems, random = Math
 const formatResearch = (research) =>
   research.length ? research.map((p) => `- ${p.slug} — ${p.title} (${p.difficulty})`).join("\n") : "none";
 
-export const makeDrafterNode = ({ buildDrafterAgent }) => async (state) => {
-  const agent = await buildDrafterAgent(state.useFallbackModel);
-  const result = await agent.invoke(
-    {
-      messages: [
-        {
-          role: "user",
-          content: [
-            `Generate exactly ${state.count} interview questions.`,
-            `Role: ${state.role}`,
-            `Interview type: ${state.interviewType}`,
-            `Category mix: ${JSON.stringify(state.plan.categoryCounts)}`,
-            `LeetCode problems you may use (one per technical question):\n${formatResearch(state.research)}`,
-            ...(state.validationErrors?.length
-              ? [`Your previous draft was rejected: ${state.validationErrors.join("; ")}. Fix these.`]
-              : []),
-          ].join("\n"),
-        },
-      ],
-    },
-    { recursionLimit: 10 },
-  );
-  return { draftQuestions: attachSources(result.structuredResponse.questions, state.research) };
+// `draft({ useFallbackModel, prompt })` → { questions } is the drafter model (see models.js).
+export const makeDrafterNode = ({ draft }) => async (state) => {
+  const prompt = [
+    `Generate exactly ${state.count} interview questions.`,
+    `Role: ${state.role}`,
+    `Interview type: ${state.interviewType}`,
+    `Category mix: ${JSON.stringify(state.plan.categoryCounts)}`,
+    `LeetCode problems you may use (one per technical question):\n${formatResearch(state.research)}`,
+    ...(state.validationErrors?.length
+      ? [`Your previous draft was rejected: ${state.validationErrors.join("; ")}. Fix these.`]
+      : []),
+  ].join("\n");
+  const { questions } = await draft({ useFallbackModel: state.useFallbackModel, prompt });
+  return { draftQuestions: attachSources(questions, state.research) };
 };
 
 const MAX_CONTENT_RETRIES = 2;
@@ -165,11 +156,8 @@ export const humanApprovalNode = async (state) => {
   });
 };
 
-export const makeFinalizeNode = ({ prisma }) => async (state) => {
-  const finalQuestions = state.approval?.questions ?? state.draftQuestions;
-  await prisma.interview.update({
-    where: { id: state.interviewId },
-    data: { questions: finalQuestions },
-  });
+// `saveQuestions(interviewId, questions)` persists through the interview repository.
+export const makeFinalizeNode = ({ saveQuestions }) => async (state) => {
+  await saveQuestions(state.interviewId, state.approval?.questions ?? state.draftQuestions);
   return {};
 };

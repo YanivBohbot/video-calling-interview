@@ -151,11 +151,9 @@ describe("researcher node", () => {
 describe("drafter node", () => {
   const sampleQuestions = [{ text: "Explain closures", category: "technical", difficulty: "medium" }];
 
-  it("returns the agent's drafted questions and passes the fallback flag through", async () => {
-    const buildDrafterAgent = vi.fn().mockResolvedValue({
-      invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: sampleQuestions } }),
-    });
-    const node = makeDrafterNode({ buildDrafterAgent });
+  it("returns the model's drafted questions and passes the fallback flag through", async () => {
+    const draft = vi.fn().mockResolvedValue({ questions: sampleQuestions });
+    const node = makeDrafterNode({ draft });
     const result = await node({
       plan: { categoryCounts: { technical: 1 } },
       research: [],
@@ -165,12 +163,12 @@ describe("drafter node", () => {
       interviewType: "technical",
     });
     expect(result).toEqual({ draftQuestions: sampleQuestions });
-    expect(buildDrafterAgent).toHaveBeenCalledWith(true);
+    expect(draft).toHaveBeenCalledWith(expect.objectContaining({ useFallbackModel: true }));
   });
 
   it("includes research notes and the requested count in the user message", async () => {
-    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: sampleQuestions } }) };
-    const node = makeDrafterNode({ buildDrafterAgent: async () => agent });
+    const draft = vi.fn().mockResolvedValue({ questions: sampleQuestions });
+    const node = makeDrafterNode({ draft });
     await node({
       plan: { categoryCounts: { technical: 1 } },
       research: [{ slug: "two-sum", title: "Two Sum", difficulty: "Easy" }],
@@ -179,24 +177,20 @@ describe("drafter node", () => {
       role: "x",
       interviewType: "technical",
     });
-    const content = agent.invoke.mock.calls[0][0].messages[0].content;
+    const content = draft.mock.calls[0][0].prompt;
     expect(content).toContain("two-sum — Two Sum (Easy)");
     expect(content).toContain("Generate exactly 1");
     expect(content).not.toContain("rejected");
   });
 
   it("turns the model's sourceSlug into a verified source on technical questions only", async () => {
-    const agent = {
-      invoke: vi.fn().mockResolvedValue({
-        structuredResponse: {
-          questions: [
-            { text: "Rank players by score", category: "technical", difficulty: "medium", sourceSlug: "rank-scores" },
-            { text: "Tell me about a conflict", category: "behavioral", difficulty: "easy", sourceSlug: "rank-scores" },
-          ],
-        },
-      }),
-    };
-    const node = makeDrafterNode({ buildDrafterAgent: async () => agent });
+    const draft = vi.fn().mockResolvedValue({
+      questions: [
+        { text: "Rank players by score", category: "technical", difficulty: "medium", sourceSlug: "rank-scores" },
+        { text: "Tell me about a conflict", category: "behavioral", difficulty: "easy", sourceSlug: "rank-scores" },
+      ],
+    });
+    const node = makeDrafterNode({ draft });
     const { draftQuestions } = await node({
       plan: { categoryCounts: { technical: 1, behavioral: 1 } },
       research: [{ slug: "rank-scores", title: "Rank Scores", difficulty: "Medium" }],
@@ -217,8 +211,8 @@ describe("drafter node", () => {
   });
 
   it("tells the model what was wrong with its previous draft on a retry", async () => {
-    const agent = { invoke: vi.fn().mockResolvedValue({ structuredResponse: { questions: sampleQuestions } }) };
-    const node = makeDrafterNode({ buildDrafterAgent: async () => agent });
+    const draft = vi.fn().mockResolvedValue({ questions: sampleQuestions });
+    const node = makeDrafterNode({ draft });
     await node({
       plan: { categoryCounts: { technical: 1 } },
       research: [],
@@ -228,7 +222,7 @@ describe("drafter node", () => {
       interviewType: "technical",
       validationErrors: ['duplicate question: "Explain closures"'],
     });
-    const content = agent.invoke.mock.calls[0][0].messages[0].content;
+    const content = draft.mock.calls[0][0].prompt;
     expect(content).toContain("Your previous draft was rejected");
     expect(content).toContain('duplicate question: "Explain closures"');
   });
@@ -328,22 +322,22 @@ describe("fallback node", () => {
 
 describe("finalize node", () => {
   it("persists the approved (edited) questions, not the original draft", async () => {
-    const update = vi.fn().mockResolvedValue({});
-    const node = makeFinalizeNode({ prisma: { interview: { update } } });
+    const saveQuestions = vi.fn().mockResolvedValue({});
+    const node = makeFinalizeNode({ saveQuestions });
     const edited = [{ text: "Edited question", category: "technical", difficulty: "hard" }];
     await node({
       interviewId: "iv-1",
       draftQuestions: [{ text: "Original", category: "technical", difficulty: "easy" }],
       approval: { approved: true, questions: edited },
     });
-    expect(update).toHaveBeenCalledWith({ where: { id: "iv-1" }, data: { questions: edited } });
+    expect(saveQuestions).toHaveBeenCalledWith("iv-1", edited);
   });
 
   it("falls back to the original draft when approval carries no edited questions", async () => {
-    const update = vi.fn().mockResolvedValue({});
-    const node = makeFinalizeNode({ prisma: { interview: { update } } });
+    const saveQuestions = vi.fn().mockResolvedValue({});
+    const node = makeFinalizeNode({ saveQuestions });
     const draft = [{ text: "Original", category: "technical", difficulty: "easy" }];
     await node({ interviewId: "iv-1", draftQuestions: draft, approval: { approved: true } });
-    expect(update).toHaveBeenCalledWith({ where: { id: "iv-1" }, data: { questions: draft } });
+    expect(saveQuestions).toHaveBeenCalledWith("iv-1", draft);
   });
 });

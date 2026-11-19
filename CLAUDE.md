@@ -99,4 +99,18 @@ Code execution (the "Run" button) calls the public Piston API (`emkc.org`) direc
 
 ### AI question generator
 
-`backend/src/agents/` holds the LangGraph pipeline (planner → researcher → drafter → validator → human approval → finalize) that drafts interview questions, grounded on LeetCode problems through the LeetCode MCP server, and saves approved ones to `Interview.questions` (Json). An audit against the LangChain docs, with the recommended restructuring, is in `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.
+`backend/src/agents/` drafts interview questions with a LangGraph pipeline (planner → researcher → drafter → validator → human approval → finalize), grounded on LeetCode problems via the LeetCode MCP server; approved questions land in `Interview.questions` (Json).
+
+```
+agents/leetcodeMcpClient.js        createLeetCodeTools() → { getTools, close } — MCP server pinned (LEETCODE_MCP_PACKAGE)
+agents/questionGenerator/
+  state.js · prompts.js · sources.js · errors.js   schemas, prompts, LeetCode source handling
+  models.js          createQuestionModels({ model, fallbackModel }) → { chooseSearch, draft } — initChatModel(...).withStructuredOutput(zod)
+  leetcodeSearch.js  createSearchProblems({ getTools }) — code (not the model) calls search_problems
+  nodes.js           the graph nodes (pure; collaborators injected)
+  graph.js           buildGraph({ checkpointer, chooseSearch, searchProblems, draft, saveQuestions }) — wiring only
+  checkpointer.js    PostgresSaver in its own "langgraph" schema (setup() at boot)
+  runner.js          createQuestionGenerator({ graph }) → { start, resume } (thread = interviewId:jobId)
+```
+
+All of it is assembled lazily in `container.js` (`container.ai.setup / warmUp / close` are called by `server.js`); agents never import Prisma or read `process.env`. Models are full LangChain `provider:model` strings: `AI_MODEL` (default `openai:gpt-4o-mini`) and `AI_MODEL_FALLBACK` (default `openai:gpt-4o`); a bare name means OpenAI. Audit and rationale: `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.

@@ -64,6 +64,13 @@ describe("POST /api/interviews/:id/questions/generate", () => {
     expect(generation.start).not.toHaveBeenCalled();
   });
 
+  it("does not require an OpenAI key when another provider's model is configured", async () => {
+    config = { ...TEST_CONFIG, openaiApiKey: undefined, aiModel: "anthropic:claude-sonnet-5" };
+    build();
+    generation.start.mockResolvedValue({ jobId: "j", draftQuestions: [], plan: {} });
+    expect((await generate()).status).toBe(200);
+  });
+
   it("returns 429 after exhausting the rate limit for a key", async () => {
     interviewRepository.findById.mockResolvedValue({ id: "iv-1", interviewerId: "u-ada", role: "x", interviewType: "technical" });
     generation.start.mockResolvedValue({ jobId: "job-1", draftQuestions: [], plan: {} });

@@ -5,12 +5,18 @@ const blankAsUnset = (schema) => z.preprocess((v) => (v === "" ? undefined : v),
 
 const optional = blankAsUnset(z.string().min(1).optional());
 
+// LangChain model strings are "provider:model"; a bare name (older .env files) means OpenAI.
+const modelName = (fallback) =>
+  blankAsUnset(z.string().min(1).default(fallback)).transform((name) => (name.includes(":") ? name : `openai:${name}`));
+
 const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   CLIENT_URL: z.string().min(1),
   PORT: blankAsUnset(z.coerce.number().int().positive().default(3000)),
   AI_QUESTION_COUNT: blankAsUnset(z.coerce.number().int().positive().default(6)),
   OPENAI_API_KEY: optional,
+  AI_MODEL: modelName("openai:gpt-4o-mini"),
+  AI_MODEL_FALLBACK: modelName("openai:gpt-4o"),
   STREAM_API_KEY: optional,
   STREAM_API_SECRET: optional,
   // Verifies Clerk session tokens and reads Clerk users (no publishable key needed server-side).
@@ -34,6 +40,8 @@ export const loadConfig = (env) => {
     clientUrl: e.CLIENT_URL,
     databaseUrl: e.DATABASE_URL,
     aiQuestionCount: e.AI_QUESTION_COUNT,
+    aiModel: e.AI_MODEL,
+    aiModelFallback: e.AI_MODEL_FALLBACK,
     openaiApiKey: e.OPENAI_API_KEY,
     stream: Object.freeze({ apiKey: e.STREAM_API_KEY, apiSecret: e.STREAM_API_SECRET }),
     clerk: Object.freeze({ secretKey: e.CLERK_SECRET_KEY, publishableKey: e.CLERK_PUBLISHABLE_KEY }),

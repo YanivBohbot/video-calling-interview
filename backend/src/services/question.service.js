@@ -39,7 +39,9 @@ export const createQuestionService = ({ interviewRepository, generation, rateLim
   const generate = async (principal, interviewId) => {
     const interview = await getOwned(principal, interviewId);
 
-    if (!config.openaiApiKey) throw new AppError(500, "AI not configured: OPENAI_API_KEY missing");
+    // Only OpenAI models need this key; other providers read their own (e.g. ANTHROPIC_API_KEY).
+    const usesOpenAi = !config.aiModel || config.aiModel.startsWith("openai:");
+    if (usesOpenAi && !config.openaiApiKey) throw new AppError(500, "AI not configured: OPENAI_API_KEY missing");
 
     const gate = checkBudget(principal);
     if (!gate.ok) throw new RateLimitError("Too many AI generations, slow down", gate.retryAfter);

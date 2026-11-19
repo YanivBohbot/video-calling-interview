@@ -3,6 +3,8 @@
 Date: 2026-11-20 · Scope: `backend/src/agents/**` (LeetCode MCP client + LangGraph question-generator pipeline) and how `services/question.service.js` uses it.
 References: skills `langchain-fundamentals`, `langchain-dependencies`, `langchain-typescript-quickstart`; LangChain JS docs (docs.langchain.com/oss/javascript — models / structured output, quickstart).
 
+**Status (2026-11-20): recommendations 1–4 applied on `refactor/ai-agent`** — `graph.js` split into models / leetcodeSearch / graph / checkpointer / runner; config + repository injected through `container.js`; `initChatModel(...).withStructuredOutput()` with `provider:model` strings; `AIConfigError` thrown on model init failure; MCP server pinned to 1.5.1 (1.4.0 no longer starts) and closed on shutdown. Verified live: one real generation (6 questions, 4 LeetCode-grounded), rejected without writing. Recommendation 5 (LangSmith) not applied — optional.
+
 ## Verdict
 
 **The agent uses the current (v1) APIs correctly and the pipeline design is sound** — explicit LangGraph graph, human-in-the-loop with `interrupt()` + checkpointer, typed state, retry policy, structured output, MCP tools through the official adapter. Nothing is on a deprecated/legacy API.

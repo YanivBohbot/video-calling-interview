@@ -1,49 +1,60 @@
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 
+// Pinned (1.5.1 = the version verified working; 1.4.0 no longer starts — a dependency moved).
+// The MCP server is downloaded by npx at runtime, so an unpinned name would run
+// whatever was published last. Bump deliberately (and re-check the tool output format).
+export const LEETCODE_MCP_PACKAGE = "@jinzcdev/leetcode-mcp-server@1.5.1";
+
 const ALLOWED_TOOL_NAMES = new Set(["get_daily_challenge", "get_problem", "search_problems"]);
 
-const buildDefaultClient = () =>
+const createDefaultClient = () =>
   new MultiServerMCPClient({
     leetcode: {
       transport: "stdio",
       command: "npx",
-      args: ["-y", "@jinzcdev/leetcode-mcp-server", "--site", "global"],
+      args: ["-y", LEETCODE_MCP_PACKAGE, "--site", "global"],
     },
   });
 
-let cachedToolsPromise = null;
+// LeetCode MCP tools, connected once and shared. A failed connection is not memoised
+// (a transient cold-start error, e.g. the npx download timing out, must not disable
+// grounding until restart): the next call retries with a fresh client.
+// getTools() never rejects — it resolves to [] when the server is unreachable.
+export const createLeetCodeTools = ({ createClient = createDefaultClient } = {}) => {
+  let client = null;
+  let toolsPromise = null;
 
-export const getLeetCodeTools = async ({ client } = {}) => {
-  if (cachedToolsPromise) return cachedToolsPromise;
-
-  const attempt = (async () => {
+  const connect = async () => {
     try {
-      const mcpClient = client || buildDefaultClient();
-      const tools = (await mcpClient.getTools()).filter((t) => ALLOWED_TOOL_NAMES.has(t.name));
+      client = createClient();
+      const tools = (await client.getTools()).filter((t) => ALLOWED_TOOL_NAMES.has(t.name));
       console.log("leetcodeMcpClient: loaded tools:", tools.map((t) => t.name));
       return tools;
     } catch (err) {
-      console.error(
-        "leetcodeMcpClient: failed to connect, continuing without LeetCode tools:",
-        err.message,
-      );
+      console.error("leetcodeMcpClient: failed to connect, continuing without LeetCode tools:", err.message);
       return null;
     }
-  })();
+  };
 
-  // Don't memoize failures: a transient cold-start error (e.g. the npx download timing
-  // out) must not disable LeetCode grounding for the rest of the process. The reset runs
-  // in .then() so it always lands after the assignment, even if the attempt failed synchronously.
-  cachedToolsPromise = attempt.then((tools) => {
-    if (tools) return tools;
-    cachedToolsPromise = null;
-    return [];
-  });
+  const getTools = () => {
+    if (!toolsPromise) {
+      // The reset runs in .then() so it always lands after the assignment.
+      toolsPromise = connect().then((tools) => {
+        if (tools) return tools;
+        toolsPromise = null;
+        return [];
+      });
+    }
+    return toolsPromise;
+  };
 
-  return cachedToolsPromise;
-};
+  // Stops the stdio child process (graceful shutdown).
+  const close = async () => {
+    const current = client;
+    client = null;
+    toolsPromise = null;
+    if (current) await current.close().catch(() => {});
+  };
 
-// Test-only: clears the memoized connection so each test starts fresh.
-export const _resetLeetCodeToolsCache = () => {
-  cachedToolsPromise = null;
+  return { getTools, close };
 };

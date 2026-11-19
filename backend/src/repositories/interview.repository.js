@@ -56,6 +56,10 @@ export const createInterviewRepository = ({ prisma }) => ({
   findByInviteHash: (inviteTokenHash) =>
     prisma.interview.findUnique({ where: { inviteTokenHash }, select: { id: true, status: true } }),
 
+  // Approved AI questions (called by the question generator's finalize step).
+  saveQuestions: (id, questions) =>
+    prisma.interview.update({ where: { id }, data: { questions }, select: { id: true } }).catch(notFound),
+
   setInviteHash: (id, inviteTokenHash) =>
     prisma.interview
       .update({ where: { id }, data: { inviteTokenHash, inviteCreatedAt: new Date() }, select: { id: true } })
