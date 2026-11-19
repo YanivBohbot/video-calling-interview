@@ -6,6 +6,7 @@ import {
 } from "../agents/questionGenerator/errors.js";
 import { AppError, NotFoundError, RateLimitError, UpstreamError, ValidationError } from "../shared/errors.js";
 import { validateQuestionsPayload } from "../validators/question.validation.js";
+import { DEMO } from "../auth/principal.js";
 
 // Generation errors: config problems are shown, provider failures are a 502.
 const toGenerateError = (err) => {
@@ -23,14 +24,24 @@ const toApproveError = (err) =>
 
 // AI question generation with a human approval step.
 // `generation` is { start, resume } from the LangGraph pipeline (injected, so tests fake it).
-export const createQuestionService = ({ interviewRepository, generation, rateLimiter, config }) => {
-  const generate = async ({ interviewId, identityKey }) => {
+// Only the interview's owner may generate or approve. Interviewers are limited per user;
+// all demo visitors share one, tighter budget (the demo is public).
+export const createQuestionService = ({ interviewRepository, generation, rateLimiter, demoRateLimiter, config }) => {
+  const getOwned = async (principal, interviewId) => {
     const interview = await interviewRepository.findById(interviewId);
-    if (!interview) throw new NotFoundError("Interview not found");
+    if (!interview || interview.interviewerId !== principal.userId) throw new NotFoundError("Interview not found");
+    return interview;
+  };
+
+  const checkBudget = (principal) =>
+    principal.kind === DEMO ? demoRateLimiter.check("demo") : rateLimiter.check(principal.userId);
+
+  const generate = async (principal, interviewId) => {
+    const interview = await getOwned(principal, interviewId);
 
     if (!config.openaiApiKey) throw new AppError(500, "AI not configured: OPENAI_API_KEY missing");
 
-    const gate = rateLimiter.check(identityKey);
+    const gate = checkBudget(principal);
     if (!gate.ok) throw new RateLimitError("Too many AI generations, slow down", gate.retryAfter);
 
     try {
@@ -48,10 +59,11 @@ export const createQuestionService = ({ interviewRepository, generation, rateLim
 
   // Resolves a paused draft. The thread is always addressed by the interview in the URL,
   // so a jobId minted for another interview resolves to nothing (404) — never to that interview.
-  const approve = async ({ interviewId, jobId, approved, questions }) => {
+  const approve = async (principal, interviewId, { jobId, approved, questions } = {}) => {
     if (typeof jobId !== "string" || typeof approved !== "boolean") {
       throw new ValidationError("jobId (string) and approved (boolean) are required");
     }
+    await getOwned(principal, interviewId);
     // Validate before resuming: a payload rejected inside the graph would error the
     // paused thread and make the draft permanently un-approvable.
     if (approved && questions !== undefined) {

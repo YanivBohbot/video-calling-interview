@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { buildTestApp, TEST_CONFIG, authAs } from "./testApp.js";
+import { buildTestApp, TEST_CONFIG, authAs, PRINCIPALS } from "./testApp.js";
+
+const { ada, bob, demo, candidateOf } = PRINCIPALS;
 import {
   AIConfigError,
   AIProviderError,
@@ -25,16 +27,20 @@ const stubPrisma = () => ({
 });
 
 const build = () => {
-  ({ app } = buildTestApp({ prisma: stubPrisma(), config, generation }));
+  ({ app } = buildTestApp({ prisma: stubPrisma(), config, generation, principal: ada }));
 };
 
-const generate = (id = "iv-1", clerk = "user-a") =>
-  request(app).post(`/api/interviews/${id}/questions/generate`).set("x-clerk-id", clerk);
-const approve = (body, id = "iv-1") =>
-  request(app).post(`/api/interviews/${id}/questions/approve`).set("x-clerk-id", "user-a").send(body);
+const generate = (id = "iv-1", principal = ada) =>
+  request(app).post(`/api/interviews/${id}/questions/generate`).set(authAs(principal));
+const approve = (body, id = "iv-1", principal = ada) =>
+  request(app).post(`/api/interviews/${id}/questions/approve`).set(authAs(principal)).send(body);
 
 beforeEach(() => {
-  interviewRepository = { findById: vi.fn(), findByIdWithInterviewer: vi.fn() };
+  // By default every interview belongs to Ada (the caller).
+  interviewRepository = {
+    findById: vi.fn(async (id) => ({ id, interviewerId: "u-ada", role: "x", interviewType: "technical" })),
+    findByIdWithInterviewer: vi.fn(),
+  };
   generation = { start: vi.fn(), resume: vi.fn() };
   config = TEST_CONFIG;
   build();
@@ -51,15 +57,15 @@ describe("POST /api/interviews/:id/questions/generate", () => {
   it("returns 500 when OPENAI_API_KEY is missing", async () => {
     config = { ...TEST_CONFIG, openaiApiKey: undefined };
     build();
-    interviewRepository.findById.mockResolvedValue({ id: "iv-1", role: "x", interviewType: "technical" });
-    const res = await generate("iv-1", "user-nokey");
+    interviewRepository.findById.mockResolvedValue({ id: "iv-1", interviewerId: "u-ada", role: "x", interviewType: "technical" });
+    const res = await generate("iv-1");
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ message: "AI not configured: OPENAI_API_KEY missing" });
     expect(generation.start).not.toHaveBeenCalled();
   });
 
   it("returns 429 after exhausting the rate limit for a key", async () => {
-    interviewRepository.findById.mockResolvedValue({ id: "iv-1", role: "x", interviewType: "technical" });
+    interviewRepository.findById.mockResolvedValue({ id: "iv-1", interviewerId: "u-ada", role: "x", interviewType: "technical" });
     generation.start.mockResolvedValue({ jobId: "job-1", draftQuestions: [], plan: {} });
     for (let i = 0; i < 10; i++) await generate();
     const res = await generate();
@@ -70,18 +76,18 @@ describe("POST /api/interviews/:id/questions/generate", () => {
 
   it("returns 502 when the generation throws AIProviderError, without the provider detail", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    interviewRepository.findById.mockResolvedValue({ id: "iv-2", role: "x", interviewType: "technical" });
+    interviewRepository.findById.mockResolvedValue({ id: "iv-2", interviewerId: "u-ada", role: "x", interviewType: "technical" });
     generation.start.mockRejectedValue(new AIProviderError("boom: upstream 503 at api.openai.com"));
-    const res = await generate("iv-2", "user-b");
+    const res = await generate("iv-2");
     expect(res.status).toBe(502);
     expect(res.body).toEqual({ message: "AI service unavailable" });
   });
 
   it("surfaces an AIConfigError as a 500 with its message", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    interviewRepository.findById.mockResolvedValue({ id: "iv-1", role: "x", interviewType: "technical" });
+    interviewRepository.findById.mockResolvedValue({ id: "iv-1", interviewerId: "u-ada", role: "x", interviewType: "technical" });
     generation.start.mockRejectedValue(new AIConfigError("AI_MODEL is not a supported model"));
-    const res = await generate("iv-1", "user-cfg");
+    const res = await generate("iv-1");
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ message: "AI_MODEL is not a supported model" });
   });
@@ -89,9 +95,9 @@ describe("POST /api/interviews/:id/questions/generate", () => {
   it("returns 200 with jobId/draftQuestions/plan on success", async () => {
     const draftQuestions = [{ text: "Q1", category: "technical", difficulty: "easy" }];
     const plan = { categoryCounts: { technical: 1 } };
-    interviewRepository.findById.mockResolvedValue({ id: "iv-3", role: "Backend", interviewType: "technical" });
+    interviewRepository.findById.mockResolvedValue({ id: "iv-3", interviewerId: "u-ada", role: "Backend", interviewType: "technical" });
     generation.start.mockResolvedValue({ jobId: "job-3", draftQuestions, plan });
-    const res = await generate("iv-3", "user-c");
+    const res = await generate("iv-3");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ jobId: "job-3", status: "pending_approval", draftQuestions, plan });
     expect(generation.start).toHaveBeenCalledWith({
@@ -100,6 +106,26 @@ describe("POST /api/interviews/:id/questions/generate", () => {
       interviewType: "technical",
       count: 6,
     });
+  });
+
+  it("caps demo generations at 5 per hour in total", async () => {
+    interviewRepository.findById.mockResolvedValue({ id: "iv-d", interviewerId: "u-demo", role: "x", interviewType: "technical" });
+    generation.start.mockResolvedValue({ jobId: "j", draftQuestions: [], plan: {} });
+    for (let i = 0; i < 5; i++) expect((await generate("iv-d", demo)).status).toBe(200);
+    const res = await generate("iv-d", demo);
+    expect(res.status).toBe(429);
+  });
+
+  it("answers 404 on someone else's interview, without calling the AI", async () => {
+    const res = await generate("iv-1", bob);
+    expect(res.status).toBe(404);
+    expect((await approve({ jobId: "j", approved: true }, "iv-1", bob)).status).toBe(404);
+    expect(generation.start).not.toHaveBeenCalled();
+    expect(generation.resume).not.toHaveBeenCalled();
+  });
+
+  it("is closed to candidates", async () => {
+    expect((await generate("iv-1", candidateOf("iv-1"))).status).toBe(403);
   });
 
   it("refuses callers without an identity", async () => {
@@ -111,7 +137,7 @@ describe("POST /api/interviews/:id/questions/generate", () => {
   it("hides unexpected failures behind Failed to generate questions", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     interviewRepository.findById.mockRejectedValue(new Error("db down"));
-    const res = await generate("iv-1", "user-err");
+    const res = await generate("iv-1");
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ message: "Failed to generate questions" });
   });

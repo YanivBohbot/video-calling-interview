@@ -30,6 +30,8 @@ import { createStreamRouter } from "./routes/stream.routes.js";
 import { createAuthRouter } from "./routes/auth.routes.js";
 
 const AI_GENERATIONS_PER_HOUR = 10;
+// Shared by every demo visitor (the demo is public).
+const DEMO_AI_GENERATIONS_PER_HOUR = 5;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 // Composition root: the only place that knows which implementation backs each
@@ -83,6 +85,7 @@ export const createContainer = ({
       interviewRepository: repositories.interview,
       generation,
       rateLimiter: createRateLimiter({ max: AI_GENERATIONS_PER_HOUR, windowMs: ONE_HOUR_MS }),
+      demoRateLimiter: createRateLimiter({ max: DEMO_AI_GENERATIONS_PER_HOUR, windowMs: ONE_HOUR_MS }),
       config,
     }),
     stream: createStreamService({

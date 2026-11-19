@@ -110,16 +110,9 @@ describe("questions and stream", () => {
   it("rejects an approval whose approved flag is not a boolean", async () => {
     const res = await request(app)
       .post("/api/interviews/iv1/questions/approve")
-      .set("x-clerk-id", "c1")
       .send({ jobId: "j", approved: "yes" });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ message: "jobId (string) and approved (boolean) are required" });
   });
 
-  it("rejects a stream token request whose userId is repeated (array)", async () => {
-    const res = await request(app).get("/api/stream/token?userId=a&userId=b");
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ message: "User ID is required" });
-    expect(streamClient.generateUserToken).not.toHaveBeenCalled();
-  });
 });
