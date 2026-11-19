@@ -43,6 +43,17 @@ describe("errorHandler", () => {
     expect(runHandler(err)).toEqual({ status: 400, body: { message: "Invalid JSON body" } });
   });
 
+  it.each([
+    ["entity.too.large", 413],
+    ["encoding.unsupported", 415],
+    ["request.aborted", 400],
+  ])("keeps Express's own client-error status for %s instead of a 500", (type, status) => {
+    const err = Object.assign(new Error(`raw parser detail for ${type}`), { type, status, expose: true });
+    const out = runHandler(err);
+    expect(out.status).toBe(status);
+    expect(JSON.stringify(out.body)).not.toContain("raw parser detail");
+  });
+
   it("hides a plain Error behind a generic 500", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(runHandler(new Error("connection string postgres://u:p@h"))).toEqual({

@@ -15,6 +15,11 @@ export const errorHandler = (err, req, res, next) => {
   if (err?.type === "entity.parse.failed") {
     return res.status(400).json({ message: "Invalid JSON body" });
   }
+  // Other client errors raised by Express / body-parser (413 too large, 415 encoding…):
+  // keep their status, but not their raw message.
+  if (Number.isInteger(err?.status) && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ message: "Invalid request" });
+  }
   console.error("Unhandled error:", err);
   return res.status(500).json({ message: "Internal server error" });
 };
