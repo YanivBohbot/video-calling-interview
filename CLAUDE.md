@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 TalentIQ — a full-stack technical interview platform: video calls (Stream.io), a collaborative Monaco code editor synced over Socket.io, and a tldraw whiteboard. Auth is via Clerk. It's a two-package monorepo (`backend/`, `frontend/`) with no shared build tooling between them.
 
+## MCP Market skills
+
+For any backend task (architecture, auth, security, tests, performance, DevOps), first consult the `mcp__mcpmarket__skill_backend_development` tool and read the relevant `references/*` files it lists (e.g. `backend-architecture.md`, `backend-authentication.md`, `backend-security.md`, `backend-testing.md`). Its guidance is advisory: the project's own constraints in this file take precedence.
+
 ## Commands
 
 All commands below are run from `backend/` or `frontend/` — there is no root-level dev/test script.
