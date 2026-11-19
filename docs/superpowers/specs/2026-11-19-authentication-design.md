@@ -83,14 +83,17 @@ The Stream `user_id` is now **derived by the backend from the principal**; the `
 
 Room views:
 - **Owner view** = today's `GET /api/interviews/:id` shape (Mongo-shaped, includes `questions`).
-- **Candidate view** = `{ _id, candidateName, role, interviewType, scheduledAt, duration, status, codeLanguage, codeSnapshot, role: "candidate" }` — no `questions`, no `notes`, no interviewer e-mail.
+- **Candidate view** = `{ _id, candidateName, role, interviewType, scheduledAt, duration, status, codeLanguage, codeSnapshot, viewer: "candidate" }` — no `questions`, no `notes`, no interviewer e-mail.
 
 Status codes: no/invalid credential → 401 `{ message: "Unauthorized" }`; right identity, wrong kind (candidate on an interviewer route) → 403 `{ message: "Forbidden" }`; not the owner → 404 with the resource's usual not-found message.
 
 ### Candidate link
 
+The secret travels in the URL **fragment** (`#invite=`), never the query string: a fragment is not sent to any server, so it can't leak through `Referer` headers to the third parties the room loads (Stream, Clerk, jsDelivr), server logs or proxies. The candidate page reads it once, keeps it in `sessionStorage` for that interview, and removes it from the address bar with `history.replaceState`.
+
+
 - New columns on `Interview`: `inviteTokenHash String? @unique`, `inviteCreatedAt DateTime?` (Prisma migration).
-- `POST /api/interviews/:id/invite` (owner) creates 32 random bytes (`crypto.randomBytes`, base64url), stores its SHA-256, returns `{ url: "<CLIENT_URL>/room/<id>?invite=<secret>" }`. Calling it again replaces the secret (old link dies). The secret is never stored or logged in clear and can't be read back — the UI shows it right after generation and offers "Regenerate".
+- `POST /api/interviews/:id/invite` (owner) creates 32 random bytes (`crypto.randomBytes`, base64url), stores its SHA-256, returns `{ url: "<CLIENT_URL>/room/<id>#invite=<secret>" }`. Calling it again replaces the secret (old link dies). The secret is never stored or logged in clear and can't be read back — the UI shows it right after generation and offers "Regenerate".
 - A candidate request carries `x-invite-token: <secret>`; the backend hashes it and matches `inviteTokenHash` **and** the `:id` in the route. Constant-time comparison is unnecessary (lookup by unique hash).
 - Links don't expire on a timer (interviews get rescheduled); they die on regeneration, on interview deletion, and are refused when the interview status is `completed` or `cancelled`.
 
@@ -98,20 +101,22 @@ Status codes: no/invalid credential → 401 `{ message: "Unauthorized" }`; right
 
 - The client passes its credential in the handshake: `io(url, { auth: { token } })` or `{ auth: { invite, interviewId } }`. A connection middleware resolves the principal (same strategies) and rejects unauthenticated connections.
 - `join-room` only succeeds for a room the principal may access (owner's interview, or the candidate's own interview). The demo `"default"` room id the frontend may use is not special-cased: unknown/unowned rooms are refused.
+- The credential is checked **once, at connection**: a socket already open stays authorised after sign-out or invite regeneration until it disconnects. Accepted (sockets are short-lived, per interview).
 - `question-change` is accepted only from interviewer/demo owners; candidates receive `question-update` only.
 - `code-change`, `language-change`, `code-execution` stay allowed for both sides.
 
 ### Frontend
 
+- Clerk session tokens live **60 seconds** and the Clerk SDK refreshes them in the background (verified in Clerk's docs). So `apiFetch` calls `getToken()` on **every** request (it is cached by Clerk) and never stores the token itself, and the Socket.io client passes `auth` as a **callback** — `auth: (cb) => getToken().then((token) => cb({ token }))` — so each reconnect sends a fresh token.
 - `src/lib/api.ts`: one `apiFetch(path, options)` using `VITE_API_URL` (default `http://localhost:3001`) that attaches the current credential: Clerk `getToken()` when signed in, the stored demo token in demo mode, or the invite secret in candidate mode. Every existing `fetch('http://localhost:3001/…')` goes through it; the Socket.io client uses the same URL and credential.
 - Demo: "Continue as Guest" calls `POST /api/auth/demo` and keeps the token in `sessionStorage` (so a page refresh no longer drops demo mode — today's `isDemo` state is lost on refresh). Leaving demo mode clears it.
-- New public route `/room/:id?invite=…` renders a **candidate room**: video + editor + current question banner; no AI panel, no question list, no "End Session" report, no dashboard chrome. It keeps both tabs (Code Editor and System Design whiteboard). It is reachable without Clerk sign-in. The interviewer's room stays at `/interview/:id` and keeps using `GET /api/interviews/:id`; only the candidate page uses `GET /api/interviews/:id/room`.
+- New public route `/room/:id#invite=…` renders a **candidate room**: video + editor + current question banner; no AI panel, no question list, no "End Session" report, no dashboard chrome. It keeps both tabs (Code Editor and System Design whiteboard). It is reachable without Clerk sign-in. The interviewer's room stays at `/interview/:id` and keeps using `GET /api/interviews/:id`; only the candidate page uses `GET /api/interviews/:id/room`.
 - Interviewer room: an "Invite candidate" control that generates/regenerates and copies the link.
 - Profile page uses `/api/users/me` instead of `/by-clerk/:clerkId`; other pages drop `interviewerId`/`x-clerk-id` plumbing.
 
 ### Configuration
 
-New backend env: `CLERK_SECRET_KEY` (required — already present by name today), `CLERK_PUBLISHABLE_KEY` (required by `@clerk/express`), `DEMO_TOKEN_SECRET` (required, ≥ 32 chars). Frontend: `VITE_API_URL` (optional). `loadConfig` validates these by name only (never echoes values). `.env.example` files list the names with empty values.
+New backend env: `CLERK_SECRET_KEY` (required; the old code referenced this name — presence in `.env` unverified), `CLERK_PUBLISHABLE_KEY` (required by `@clerk/express`; **note the old code read the misspelled `CLERK_PUBLISHIABLE_KEY`**, so `.env` may need the correct name), `DEMO_TOKEN_SECRET` (required, ≥ 32 chars). Frontend: `VITE_API_URL` (optional). `loadConfig` validates these by name only (never echoes values). `.env.example` files list the names with empty values.
 
 ### Rate limits
 
@@ -131,6 +136,7 @@ New backend env: `CLERK_SECRET_KEY` (required — already present by name today)
 - Dashboard numbers become **per-caller** (own interviews), and "Total users" is dropped: a platform-wide count leaks other customers' activity.
 - Not-owner answers **404**, not 403, so interview ids can't be probed.
 - `GET /api/users` and `POST /api/users` are **removed** (no frontend page calls them; users are provisioned from Clerk on first request).
+- The invite secret is carried in the URL **fragment** (`#invite=`), not the query string.
 - Invite links have **no timer**; they die on regeneration, deletion, or when the interview is completed/cancelled.
 - The demo token lives **8 h** in `sessionStorage` (survives refresh, not a closed tab).
 - Demo AI generation: **5 per hour in total**.
