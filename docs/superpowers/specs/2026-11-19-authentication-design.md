@@ -1,6 +1,6 @@
 # Authentication & access control — design
 
-Date: 2026-11-19 · Branch: `refactor/backend-layers` (or a branch stacked on it) · Status: approaches chosen by the user (1A, 2A, 3A); awaiting approval of this document.
+Date: 2026-11-19 · Branch: `refactor/backend-layers` (or a branch stacked on it) · Status: approved by the user 2026-11-19 (approaches 1A, 2A, 3A).
 
 ## Intent
 
@@ -67,7 +67,8 @@ A composite identity strategy tries, in order: `Authorization: Bearer <token>` �
 | `POST /api/auth/demo` | — | — | ✅ |
 | `GET /api/interviews`, `/stats`, `/activity` | own interviews only (stats/activity computed over own interviews) | ❌ 403 | ❌ 401 |
 | `POST /api/interviews` | interviewer = caller (body/header interviewer ids ignored) | ❌ | ❌ |
-| `GET/PATCH/DELETE /api/interviews/:id` (+ `/status`) | only if owner, else **404** (don't reveal existence) | ❌ | ❌ |
+| `GET/PATCH /api/interviews/:id` (+ `/status`) | only if owner, else **404** (don't reveal existence) | ❌ | ❌ |
+| `DELETE /api/interviews/:id` | interviewer: only if owner (else 404); **demo: 403** `{ message: "Not allowed in demo mode" }` | ❌ | ❌ |
 | `POST /api/interviews/:id/questions/*` | owner only; demo uses a stricter AI limit | ❌ | ❌ |
 | `GET /api/interviews/:id/room` (new) | full room data if owner | reduced view if invite matches `:id` | ❌ |
 | `POST /api/interviews/:id/invite` (new) | owner: generate/regenerate link → returns the URL once | ❌ | ❌ |
@@ -140,6 +141,11 @@ New backend env: `CLERK_SECRET_KEY` (required; the old code referenced this name
 - Invite links have **no timer**; they die on regeneration, deletion, or when the interview is completed/cancelled.
 - The demo token lives **8 h** in `sessionStorage` (survives refresh, not a closed tab).
 - Demo AI generation: **5 per hour in total**.
+
+## Decisions on open points (user said "ok" without picking — defaults applied, changeable)
+
+- **Existing data stays as is**: the 15 demo-owned interviews remain the demo showcase; the user's real Clerk account starts empty. No data migration.
+- **Demo visitors cannot delete interviews** (403), so a visitor can't break the showcase before a job interview.
 
 ## Left to the builder
 
