@@ -3,6 +3,9 @@ import Editor from '@monaco-editor/react';
 import { io, Socket } from 'socket.io-client';
 import { Code, Play, Copy, ExternalLink, ListChecks } from 'lucide-react';
 import type { Question, AskedQuestion } from '../lib/questions';
+import { API_URL } from '../lib/config';
+
+type SocketAuth = (cb: (data: Record<string, string>) => void) => void;
 
 interface CodeEditorProps {
   roomId: string;
@@ -11,6 +14,8 @@ interface CodeEditorProps {
   // Set for the interviewer only: their approved questions, each askable. The candidate
   // never receives this list, and the server strips the LeetCode source from asks.
   askableQuestions?: Question[];
+  // Sends a fresh credential on every (re)connection (see useApi().socketAuth).
+  socketAuth: SocketAuth;
 }
 
 const LeetCodeBadge: React.FC<{ source: NonNullable<Question['source']> }> = ({ source }) => (
@@ -25,7 +30,7 @@ const LeetCodeBadge: React.FC<{ source: NonNullable<Question['source']> }> = ({ 
   </a>
 );
 
-const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions }) => {
+const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth }) => {
   const [code, setCode] = useState<string>(
     initialCode ?? '// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();',
   );
@@ -34,13 +39,21 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
   const [isExecuting, setIsExecuting] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [current, setCurrent] = useState<AskedQuestion | null>(null);
+  const [connection, setConnection] = useState<'connecting' | 'live' | 'refused'>('connecting');
   const socketRef = useRef<Socket | null>(null);
   const isInterviewer = askableQuestions !== undefined;
   const currentSource = current ? askableQuestions?.[current.index]?.source : undefined;
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:3001');
-    socketRef.current.emit('join-room', roomId);
+    const socket = io(API_URL, { auth: socketAuth });
+    socketRef.current = socket;
+    // Join on every (re)connection: a reconnect is a fresh socket server-side.
+    socket.on('connect', () => {
+      setConnection('live');
+      socket.emit('join-room', roomId);
+    });
+    socket.on('connect_error', () => setConnection('refused'));
+    socket.on('error-message', () => setConnection('refused'));
 
     socketRef.current.on('code-update', (newCode: string) => setCode(newCode));
     socketRef.current.on('language-update', (newLang: string) => setLanguage(newLang));
@@ -53,7 +66,7 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
     return () => {
       socketRef.current?.disconnect();
     };
-  }, [roomId]);
+  }, [roomId, socketAuth]);
 
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
@@ -261,7 +274,7 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${isExecuting ? 'bg-amber-400 animate-bounce' : 'bg-green-400'} animate-pulse`} />
-            <span>{isExecuting ? 'Executing...' : 'Connected & Live'}</span>
+            <span>{isExecuting ? 'Executing...' : connection === 'live' ? 'Connected & Live' : connection === 'refused' ? 'Not connected (access refused)' : 'Connecting…'}</span>
           </div>
           <button onClick={() => setIsConsoleOpen(!isConsoleOpen)} className="hover:underline">
             {isConsoleOpen ? 'Hide Console' : 'Show Console'}

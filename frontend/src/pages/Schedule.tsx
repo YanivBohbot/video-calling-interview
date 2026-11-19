@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Clock, User, Briefcase, Video, ChevronRight, Loader2, Inbox } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useApi } from '../lib/api';
 
 interface Interview {
   _id: string;
@@ -147,14 +148,15 @@ const Schedule: React.FC = () => {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { apiFetch } = useApi();
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/interviews')
+    apiFetch('/api/interviews')
       .then((r) => r.json())
       .then((data) => setInterviews(Array.isArray(data) ? data : []))
       .catch(() => setInterviews([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [apiFetch]);
 
   const groups = groupByDate(interviews);
 

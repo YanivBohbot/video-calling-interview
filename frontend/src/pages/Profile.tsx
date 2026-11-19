@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
+import { useApi } from '../lib/api';
 
 interface UserProfile {
   _id: string;
@@ -63,8 +64,8 @@ const TYPE_LABELS: Record<string, string> = {
 const Profile: React.FC = () => {
   const { user: clerkUser, isLoaded } = useUser();
   const navigate = useNavigate();
+  const { apiFetch } = useApi();
 
-  const clerkId    = clerkUser?.id ?? 'demo';
   const clerkName  = clerkUser?.fullName ?? clerkUser?.firstName ?? 'Demo User';
   const clerkEmail = clerkUser?.emailAddresses?.[0]?.emailAddress ?? 'demo@talentiq.dev';
   const clerkImage = clerkUser?.imageUrl;
@@ -91,9 +92,9 @@ const Profile: React.FC = () => {
     setLoading(true);
     try {
       const [profileRes, statsRes, ivRes] = await Promise.all([
-        fetch(`http://localhost:3001/api/users/by-clerk/${clerkId}`),
-        fetch(`http://localhost:3001/api/users/by-clerk/${clerkId}/stats`),
-        fetch(`http://localhost:3001/api/interviews?interviewerId=${clerkId}`),
+        apiFetch('/api/users/me'),
+        apiFetch('/api/users/me/stats'),
+        apiFetch('/api/interviews'),
       ]);
 
       if (profileRes.ok) {
@@ -121,7 +122,7 @@ const Profile: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:3001/api/users/by-clerk/${clerkId}`, {
+      const res = await apiFetch('/api/users/me', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, email: clerkEmail }),

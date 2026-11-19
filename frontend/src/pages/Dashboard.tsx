@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Users, Video, CheckCircle2, Clock,
+  Video, CheckCircle2, Clock,
   MoreVertical, Play, ArrowUpRight,
   CalendarCheck, Radio, XCircle, Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
+import { useApi } from '../lib/api';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -17,7 +18,6 @@ interface Stats {
   scheduled: number;
   cancelled: number;
   avgDuration: number;
-  totalUsers: number;
 }
 
 interface ActivityItem {
@@ -155,6 +155,7 @@ const UpcomingItem = ({ interview, delay }: { interview: Interview; delay: numbe
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { apiFetch } = useApi();
 
   const [stats, setStats]             = useState<Stats | null>(null);
   const [upcoming, setUpcoming]       = useState<Interview[]>([]);
@@ -166,8 +167,8 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     Promise.all([
-      fetch('http://localhost:3001/api/interviews/stats').then((r) => r.json()),
-      fetch('http://localhost:3001/api/interviews/activity').then((r) => r.json()),
+      apiFetch('/api/interviews/stats').then((r) => r.json()),
+      apiFetch('/api/interviews/activity').then((r) => r.json()),
     ])
       .then(([s, a]) => {
         setStats(s);
@@ -176,7 +177,7 @@ const Dashboard: React.FC = () => {
       .catch(console.error)
       .finally(() => setStatsLoad(false));
 
-    fetch('http://localhost:3001/api/interviews')
+    apiFetch('/api/interviews')
       .then((r) => r.json())
       .then((data: Interview[]) => {
         if (!Array.isArray(data)) return;
@@ -193,7 +194,7 @@ const Dashboard: React.FC = () => {
       })
       .catch(console.error)
       .finally(() => setListLoad(false));
-  }, []);
+  }, [apiFetch]);
 
   return (
     <div className="space-y-8">
@@ -208,7 +209,7 @@ const Dashboard: React.FC = () => {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard label="Total Interviews" value={String(stats?.total ?? 0)}     icon={Video}       color="bg-brand"       delay={0.1} loading={statsLoading} />
-        <StatCard label="Total Users"       value={String(stats?.totalUsers ?? 0)} icon={Users}      color="bg-blue-500"    delay={0.2} loading={statsLoading} />
+        <StatCard label="Scheduled"         value={String(stats?.scheduled ?? 0)}  icon={CalendarCheck} color="bg-blue-500"    delay={0.2} loading={statsLoading} />
         <StatCard label="Completed"          value={String(stats?.completed ?? 0)} icon={CheckCircle2} color="bg-green-500" delay={0.3} loading={statsLoading} />
         <StatCard label="Avg. Duration"      value={stats?.avgDuration ? `${stats.avgDuration}m` : '—'} icon={Clock} color="bg-amber-500" delay={0.4} loading={statsLoading} />
       </div>

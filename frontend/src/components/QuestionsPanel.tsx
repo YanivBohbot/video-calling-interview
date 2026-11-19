@@ -1,14 +1,12 @@
 import React from 'react';
 import { Loader2, Save, Sparkles, ExternalLink, CheckCircle2 } from 'lucide-react';
 import type { Question } from '../lib/questions';
-
-const API = 'http://localhost:3001/api';
+import { useApi } from '../lib/api';
 
 // `questions` state lives in InterviewRoom so it survives tab switches (this panel
 // unmounts when another tab is active) and reflects the latest saved list.
 const QuestionsPanel: React.FC<{
   interviewId: string;
-  clerkId: string;
   questions: Question[];
   setQuestions: React.Dispatch<React.SetStateAction<Question[]>>;
   // Set while an AI draft is paused on the backend awaiting approval; null when the
@@ -18,7 +16,8 @@ const QuestionsPanel: React.FC<{
   setJobId: (jobId: string | null) => void;
   savedQuestions: Question[];
   onSaved: (saved: Question[]) => void;
-}> = ({ interviewId, clerkId, questions, setQuestions, jobId, setJobId, savedQuestions, onSaved }) => {
+}> = ({ interviewId, questions, setQuestions, jobId, setJobId, savedQuestions, onSaved }) => {
+  const { apiFetch } = useApi();
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -30,10 +29,7 @@ const QuestionsPanel: React.FC<{
     setError(null);
     setSavedCount(null);
     try {
-      const r = await fetch(`${API}/interviews/${interviewId}/questions/generate`, {
-        method: 'POST',
-        headers: { 'x-clerk-id': clerkId },
-      });
+      const r = await apiFetch(`/api/interviews/${interviewId}/questions/generate`, { method: 'POST' });
       const body = await r.json();
       if (!r.ok) {
         setError(
@@ -69,14 +65,14 @@ const QuestionsPanel: React.FC<{
     setError(null);
     try {
       const r = jobId
-        ? await fetch(`${API}/interviews/${interviewId}/questions/approve`, {
+        ? await apiFetch(`/api/interviews/${interviewId}/questions/approve`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-clerk-id': clerkId },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jobId, approved, questions: approved ? questions : undefined }),
           })
-        : await fetch(`${API}/interviews/${interviewId}`, {
+        : await apiFetch(`/api/interviews/${interviewId}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'x-clerk-id': clerkId },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ questions }),
           });
       if (!r.ok) {

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Video, Calendar, User, Mail, Briefcase, PlusCircle, ArrowLeft, Clock, CheckCircle, Copy, Check, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useUser } from '@clerk/clerk-react';
+import { useApi } from '../lib/api';
 import { ROLE_DOMAINS, SENIORITIES, CUSTOM_ROLE, composeRole } from '../lib/roleCatalog';
 import QuestionsPanel from '../components/QuestionsPanel';
 import type { Question } from '../lib/questions';
@@ -33,11 +33,14 @@ interface CreatedInterview {
 
 const NewInterview: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { apiFetch } = useApi();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedInterview | null>(null);
   const [copied, setCopied] = useState(false);
+  // The candidate's link carries a secret: it is created on demand (and can be regenerated).
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     candidateName: '',
     candidateEmail: '',
@@ -74,7 +77,7 @@ const NewInterview: React.FC = () => {
     const scheduledAt = new Date(`${formData.date}T${formData.time}`);
 
     try {
-      const response = await fetch('http://localhost:3001/api/interviews', {
+      const response = await apiFetch('/api/interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -85,7 +88,6 @@ const NewInterview: React.FC = () => {
           duration: formData.duration,
           interviewType: formData.interviewType,
           notes: formData.notes,
-          interviewerId: user?.id ?? 'demo',
         }),
       });
 
@@ -103,12 +105,21 @@ const NewInterview: React.FC = () => {
     }
   };
 
-  const roomLink = created
-    ? `${window.location.origin}/interview/${created._id}`
-    : '';
+  const createInvite = async () => {
+    if (!created) return;
+    setInviteError(null);
+    const res = await apiFetch(`/api/interviews/${created._id}/invite`, { method: 'POST' });
+    if (!res.ok) {
+      setInviteError('Could not create the candidate link. Please try again.');
+      return;
+    }
+    const { url } = await res.json();
+    setInviteLink(url);
+  };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(roomLink);
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -170,10 +181,18 @@ const NewInterview: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-700">Share room link with candidate</p>
+              <p className="text-sm font-semibold text-slate-700">Share the candidate's private link</p>
+              {!inviteLink ? (
+                <button
+                  onClick={createInvite}
+                  className="w-full px-4 py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-hover transition-all"
+                >
+                  Create candidate link
+                </button>
+              ) : (
               <div className="flex items-center gap-2">
                 <div className="flex-1 bg-slate-100 rounded-xl px-4 py-3 text-sm text-slate-600 font-mono truncate">
-                  {roomLink}
+                  {inviteLink}
                 </div>
                 <button
                   onClick={handleCopy}
@@ -192,6 +211,13 @@ const NewInterview: React.FC = () => {
                   </AnimatePresence>
                 </button>
               </div>
+              )}
+              {inviteError && <p className="text-sm text-red-600">{inviteError}</p>}
+              {inviteLink && (
+                <p className="text-xs text-slate-500">
+                  Anyone with this link can join this interview's room as the candidate. Creating a new link from the room disables this one.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -202,7 +228,6 @@ const NewInterview: React.FC = () => {
               <div className="bg-slate-900 rounded-2xl">
                 <QuestionsPanel
                   interviewId={created._id}
-                  clerkId={user?.id ?? 'demo'}
                   questions={genQuestions}
                   setQuestions={setGenQuestions}
                   jobId={genJobId}
@@ -223,6 +248,8 @@ const NewInterview: React.FC = () => {
               <button
                 onClick={() => {
                   setCreated(null);
+                  setInviteLink(null);
+                  setInviteError(null);
                   setFormData({ candidateName: '', candidateEmail: '', date: '', time: '', duration: 60, interviewType: 'technical', notes: '' });
                   setRoleDomain('backend');
                   setRoleSeniority('mid');

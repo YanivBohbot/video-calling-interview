@@ -9,7 +9,8 @@ import {
 } from '@stream-io/video-react-sdk';
 import { useUser } from '@clerk/clerk-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, Code, PenTool, FileText, Loader2, Save } from 'lucide-react';
+import { Video, Code, PenTool, FileText, Loader2, Save, UserPlus, Check, Copy } from 'lucide-react';
+import { useApi } from '../lib/api';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 
 const apiKey = import.meta.env.VITE_STREAM_API_KEY;
@@ -23,13 +24,14 @@ const ReportModal: React.FC<{
   interviewId: string;
   onDone: () => void;
 }> = ({ interviewId, onDone }) => {
+  const { apiFetch } = useApi();
   const [notes, setNotes] = React.useState('');
   const [saving, setSaving] = React.useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch(`http://localhost:3001/api/interviews/${interviewId}`, {
+      await apiFetch(`/api/interviews/${interviewId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes, status: 'completed' }),
@@ -96,6 +98,7 @@ export const InterviewRoom: React.FC = () => {
   const { id } = useParams();
   const { user } = useUser();
   const navigate = useNavigate();
+  const { apiFetch, socketAuth } = useApi();
   const [client, setClient] = React.useState<StreamVideoClient | null>(null);
   const [call, setCall] = React.useState<any>(null);
   const [activeTab, setActiveTab] = React.useState<'code' | 'design'>('code');
@@ -107,33 +110,39 @@ export const InterviewRoom: React.FC = () => {
     interviewerId?: { clerkID?: string } | null;
   } | null>(null);
 
-  // Only the interviewer sees the question list and can Ask — the room URL is also the
-  // candidate's share link. Guest mode has no identities, so a signed-out viewer counts
-  // as the interviewer only for interviews owned by the shared "demo" user.
-  const ownerClerkId = interviewData?.interviewerId?.clerkID;
-  const isInterviewer = user?.id ? ownerClerkId === user.id : ownerClerkId === 'demo';
+  // The backend only returns this interview to its owner, so once it has loaded the
+  // viewer is the interviewer. (Candidates use the separate /room page.)
+  const isInterviewer = interviewData !== null;
+
+  // Candidate invite: created on demand; creating a new one disables the previous link.
+  const [inviteLink, setInviteLink] = React.useState<string | null>(null);
+  const [inviteCopied, setInviteCopied] = React.useState(false);
+  const createInvite = async () => {
+    const res = await apiFetch(`/api/interviews/${id}/invite`, { method: 'POST' });
+    if (!res.ok) return console.error('Invite failed:', res.status);
+    const { url } = await res.json();
+    setInviteLink(url);
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 2000);
+  };
 
   React.useEffect(() => {
     if (!id) return;
 
-    const currentUser = user || {
-      id: `demo-user-${Math.floor(Math.random() * 10000)}`,
-      fullName: 'Guest Developer',
-      username: 'guest',
-      imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=guest'
-    };
-
     const initStream = async () => {
       try {
-        const response = await fetch(`http://localhost:3001/api/stream/token?userId=${currentUser.id}`);
-        const { token } = await response.json();
+        // The backend picks the Stream user id from our verified identity.
+        const response = await apiFetch('/api/stream/token');
+        if (!response.ok) throw new Error(`Stream token refused: ${response.status}`);
+        const { token, userId } = await response.json();
 
         const videoClient = new StreamVideoClient({
           apiKey,
           user: {
-            id: currentUser.id,
-            name: currentUser.fullName || currentUser.username || currentUser.id,
-            image: currentUser.imageUrl,
+            id: userId,
+            name: user?.fullName || user?.username || 'Guest Developer',
+            image: user?.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=guest',
           },
           token,
         });
@@ -154,13 +163,13 @@ export const InterviewRoom: React.FC = () => {
       if (call) call.leave();
       if (client) client.disconnectUser();
     };
-  }, [user, id]);
+  }, [user, id, apiFetch]);
 
   React.useEffect(() => {
     if (!id) return;
     let cancelled = false;
 
-    fetch(`http://localhost:3001/api/interviews/${id}`)
+    apiFetch(`/api/interviews/${id}`)
       .then((r) => {
         if (!r.ok) throw new Error(`Interview fetch failed: ${r.status} ${r.statusText}`);
         return r.json();
@@ -174,7 +183,7 @@ export const InterviewRoom: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, apiFetch]);
 
   const handleEndSession = async () => {
     if (call) { await call.leave(); setCall(null); }
@@ -228,6 +237,23 @@ export const InterviewRoom: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-4">
+                {isInterviewer && (
+                  <div className="flex items-center gap-2">
+                    {inviteLink && (
+                      <span className="max-w-[18rem] truncate text-xs text-slate-400 font-mono" title={inviteLink}>
+                        {inviteLink}
+                      </span>
+                    )}
+                    <button
+                      onClick={createInvite}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-brand/20 hover:bg-brand/30 text-violet-200 border border-brand/30 rounded-lg transition-colors text-sm font-medium"
+                      title={inviteLink ? 'Create a new link (the previous one stops working)' : 'Create and copy the candidate link'}
+                    >
+                      {inviteCopied ? <Check size={14} /> : inviteLink ? <Copy size={14} /> : <UserPlus size={14} />}
+                      {inviteCopied ? 'Copied!' : inviteLink ? 'Regenerate link' : 'Invite candidate'}
+                    </button>
+                  </div>
+                )}
                 <button
                   onClick={handleEndSession}
                   className="px-4 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/30 rounded-lg transition-colors text-sm font-medium"
@@ -271,6 +297,7 @@ export const InterviewRoom: React.FC = () => {
                       initialCode={interviewData?.codeSnapshot ?? undefined}
                       initialLanguage={interviewData?.codeLanguage ?? undefined}
                       askableQuestions={isInterviewer ? interviewData?.questions ?? [] : undefined}
+                      socketAuth={socketAuth}
                     />
                   ) : (
                     <Whiteboard />

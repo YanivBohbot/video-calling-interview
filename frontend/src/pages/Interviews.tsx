@@ -5,6 +5,8 @@ import {
   Trash2, AlertTriangle, X, Loader2, FileText, Save,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useApi } from '../lib/api';
+import { useCredentials } from '../lib/credentials';
 
 interface Interview {
   _id: string;
@@ -169,11 +171,14 @@ const Interviews: React.FC = () => {
   const [reportInterview, setReportInterview] = useState<Interview | null>(null);
   const [reportSaving, setReportSaving]     = useState(false);
   const navigate = useNavigate();
+  const { apiFetch } = useApi();
+  // The demo data is a shared showcase: deleting is disabled in demo mode.
+  const canDelete = useCredentials().mode !== 'demo';
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/interviews');
+      const res = await apiFetch('/api/interviews');
       const data = await res.json();
       setInterviews(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -181,7 +186,7 @@ const Interviews: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiFetch]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -189,8 +194,9 @@ const Interviews: React.FC = () => {
     if (!deletingId) return;
     setDeleteLoading(true);
     try {
-      await fetch(`http://localhost:3001/api/interviews/${deletingId}`, { method: 'DELETE' });
-      setInterviews((prev) => prev.filter((iv) => iv._id !== deletingId));
+      const res = await apiFetch(`/api/interviews/${deletingId}`, { method: 'DELETE' });
+      if (res.ok) setInterviews((prev) => prev.filter((iv) => iv._id !== deletingId));
+      else console.error('Delete failed:', res.status);
     } finally {
       setDeleteLoading(false);
       setDeletingId(null);
@@ -200,7 +206,7 @@ const Interviews: React.FC = () => {
   const handleSaveReport = async (id: string, notes: string) => {
     setReportSaving(true);
     try {
-      await fetch(`http://localhost:3001/api/interviews/${id}`, {
+      await apiFetch(`/api/interviews/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes }),
@@ -349,13 +355,13 @@ const Interviews: React.FC = () => {
                           <FileText size={15} />
                         </button>
                       )}
-                      <button
+                      {canDelete && <button
                         onClick={(e) => { e.stopPropagation(); setDeletingId(interview._id); }}
                         className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                         title="Delete interview"
                       >
                         <Trash2 size={15} />
-                      </button>
+                      </button>}
                     </div>
                   </div>
 
