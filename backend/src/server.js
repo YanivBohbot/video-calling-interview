@@ -1,8 +1,10 @@
-import express from "express";
-import dotenv from "dotenv";
-import { ENV } from "./lib/env.js";
+import "dotenv/config";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import { loadConfig } from "./config/env.js";
 import { connectDB, prisma } from "./lib/db.js";
-import cors from "cors";
+import { createContainer } from "./container.js";
+import { createApp } from "./app.js";
 import {
   applyCodeChange,
   applyLanguageChange,
@@ -15,23 +17,24 @@ import {
   getCurrentQuestion,
   clearCurrentQuestion,
 } from "./lib/roomQuestions.js";
-import interviewRoutes from "./routes/interview.routes.js";
-import streamRoutes from "./routes/stream.routes.js";
-import userRoutes from "./routes/user.routes.js";
-import sessionRoutes from "./routes/session.routes.js";
 import { getLeetCodeTools } from "./lib/agents/leetcodeMcpClient.js";
 import { ensureCheckpointerTables } from "./lib/agents/questionGenerator/graph.js";
 
-import { createServer } from "http";
-import { Server } from "socket.io";
+let config;
+try {
+  config = loadConfig(process.env);
+} catch (err) {
+  // Only variable names are in this message — never their values.
+  console.error(err.message);
+  process.exit(1);
+}
 
-dotenv.config();
-
-const app = express();
+const container = createContainer({ config, prisma });
+const app = createApp(container);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: ENV.CLIENT_URL,
+    origin: config.clientUrl,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -134,48 +137,21 @@ io.on("connection", (socket) => {
   });
 });
 
-// middelware
-app.use(express.json());
-app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
-
-// Routes
-app.use("/api/interviews", interviewRoutes);
-app.use("/api/stream", streamRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/sessions", sessionRoutes);
-
-console.log(process.env.PORT);
-
-app.get("/health", (req, res) => {
-  res.status(200).json({ msg: "success from backedn" });
-});
-
-app.get("/books", (req, res) => {
-  res.status(200).json({ msg: "success from backedn" });
-});
-
-console.log("Starting server with ENV:", ENV);
-
 const startServer = async () => {
-  try {
-    console.log("Connecting to DB...");
-    await connectDB();
-    console.log("DB connected, starting HTTP server...");
-    httpServer.listen(ENV.PORT, () => {
-      console.log(`Server running on port ${ENV.PORT}`);
-    });
-    // Warm the LeetCode MCP connection at boot (fire-and-forget) so the npx download and
-    // stdio handshake happen now, not on the first user-facing generate request.
-    // getLeetCodeTools never rejects; it resolves to [] on failure and retries on next call.
-    getLeetCodeTools().catch(() => {});
-    // Idempotent: creates the LangGraph checkpointer's Postgres tables if missing. Best-effort —
-    // a slow DB at boot must not crash the server; generation will then fail per-request instead.
-    ensureCheckpointerTables().catch((err) => console.error("Checkpointer setup failed:", err.message));
-  } catch (err) {
-    console.log("Start server error:", err);
-  }
+  await connectDB();
+  httpServer.listen(config.port, () => {
+    console.log(`Server running on port ${config.port} (client: ${config.clientUrl})`);
+  });
+  // Warm the LeetCode MCP connection at boot (fire-and-forget) so the npx download and
+  // stdio handshake happen now, not on the first user-facing generate request.
+  // getLeetCodeTools never rejects; it resolves to [] on failure and retries on next call.
+  getLeetCodeTools().catch(() => {});
+  // Idempotent: creates the LangGraph checkpointer's Postgres tables if missing. Best-effort —
+  // a slow DB at boot must not crash the server; generation will then fail per-request instead.
+  ensureCheckpointerTables().catch((err) => console.error("Checkpointer setup failed:", err.message));
 };
 
-startServer();
-
-export default app;
+startServer().catch((err) => {
+  console.error("Start server error:", err.message);
+  process.exit(1);
+});

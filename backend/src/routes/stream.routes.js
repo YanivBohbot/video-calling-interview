@@ -1,11 +1,11 @@
 import express from "express";
 import { StreamClient } from "@stream-io/node-sdk";
-import ENV from "../lib/env.js";
+// Read directly until the stream module (container-injected config) replaces this router.
 
 const router = express.Router();
 
 // Initialize Stream Client
-const streamClient = new StreamClient(ENV.STREAM_API_KEY, ENV.STREAM_API_SECRET);
+const streamClient = new StreamClient(process.env.STREAM_API_KEY, process.env.STREAM_API_SECRET);
 
 // Get Stream Token for a user
 router.get("/token", async (req, res) => {
