@@ -427,29 +427,6 @@ export const getRecentActivity = async (req, res) => {
   }
 };
 
-// ── Sessions (coding problems) ────────────────────────────────────────────────
-
-export const listSessions = async (req, res) => {
-  try {
-    const sessions = await prisma.session.findMany({
-      orderBy: [{ difficulty: "asc" }, { createdAt: "asc" }],
-    });
-    return res.status(200).json(sessions.map(toDoc));
-  } catch (err) {
-    return res.status(500).json({ message: "Fetch sessions failed", error: err.message });
-  }
-};
-
-export const getSession = async (req, res) => {
-  try {
-    const session = await prisma.session.findUnique({ where: { id: req.params.id } });
-    if (!session) return res.status(404).json({ message: "Session not found" });
-    return res.status(200).json(toDoc(session));
-  } catch (err) {
-    return res.status(500).json({ message: "Fetch session failed", error: err.message });
-  }
-};
-
 export default {
   listInterviews,
   createInterview,
@@ -464,6 +441,4 @@ export default {
   getUserStats,
   getInterviewStats,
   getRecentActivity,
-  listSessions,
-  getSession,
 };
