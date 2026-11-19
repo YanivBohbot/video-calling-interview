@@ -1,4 +1,4 @@
-import legacyStreamRouter from "./routes/stream.routes.js";
+import { StreamClient } from "@stream-io/node-sdk";
 import { createRateLimiter } from "./lib/rateLimiter.js";
 import {
   startQuestionGeneration,
@@ -8,6 +8,7 @@ import { createSessionsModule } from "./modules/sessions/index.js";
 import { createUsersModule } from "./modules/users/index.js";
 import { createInterviewsModule } from "./modules/interviews/index.js";
 import { createQuestionsModule } from "./modules/questions/index.js";
+import { createStreamModule } from "./modules/stream/index.js";
 import { createClerkHeaderStrategy } from "./auth/clerkHeaderStrategy.js";
 
 const AI_GENERATIONS_PER_HOUR = 10;
@@ -36,19 +37,23 @@ export const createContainer = ({ config, prisma }) => {
     identityStrategy,
   });
 
+  let streamClient;
+  const stream = createStreamModule({
+    getStreamClient: () =>
+      (streamClient ??= new StreamClient(config.stream.apiKey, config.stream.apiSecret)),
+  });
+
   return {
     config,
     prisma,
     auth: { identityStrategy },
-    modules: { sessions, users, interviews, questions },
+    modules: { sessions, users, interviews, questions, stream },
     routers: {
       questions: questions.router,
       interviews: interviews.router,
       users: users.router,
       sessions: sessions.router,
-    },
-    legacyRouters: {
-      stream: legacyStreamRouter,
+      stream: stream.router,
     },
   };
 };

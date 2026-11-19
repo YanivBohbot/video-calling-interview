@@ -3,7 +3,7 @@ import express from "express";
 import request from "supertest";
 import { createApp } from "./app.js";
 
-const container = (extra = {}) => ({ config: { clientUrl: "http://localhost:5174" }, legacyRouters: {}, ...extra });
+const container = (extra = {}) => ({ config: { clientUrl: "http://localhost:5174" }, routers: {}, ...extra });
 
 describe("createApp", () => {
   it("answers /health with the historical body", async () => {
@@ -23,10 +23,10 @@ describe("createApp", () => {
     expect(res.body).toEqual({ message: "Not found" });
   });
 
-  it("mounts a legacy router under its API prefix", async () => {
-    const sessions = express.Router().get("/", (req, res) => res.json(["legacy"]));
-    const res = await request(createApp(container({ legacyRouters: { sessions } }))).get("/api/sessions");
-    expect(res.body).toEqual(["legacy"]);
+  it("mounts a module router under its API prefix", async () => {
+    const sessions = express.Router().get("/", (req, res) => res.json(["module"]));
+    const res = await request(createApp(container({ routers: { sessions } }))).get("/api/sessions");
+    expect(res.body).toEqual(["module"]);
   });
 
   it("sends CORS headers for the configured client origin", async () => {

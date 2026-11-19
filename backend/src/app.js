@@ -13,10 +13,9 @@ const MOUNTS = [
 ];
 
 // Builds the Express app from the container. No listen() here, so tests can drive it
-// with Supertest. Migrated modules come from `container.routers`; anything not yet
-// migrated falls back to `container.legacyRouters`.
+// with Supertest. Each feature module contributes one router in `container.routers`.
 export const createApp = (container) => {
-  const { config, routers = {}, legacyRouters = {} } = container;
+  const { config, routers = {} } = container;
   const app = express();
 
   app.use(express.json());
@@ -27,7 +26,7 @@ export const createApp = (container) => {
   });
 
   for (const [name, path] of MOUNTS) {
-    const router = routers[name] ?? legacyRouters[name];
+    const router = routers[name];
     if (router) app.use(path, router);
   }
 
