@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useCredentials } from "./lib/credentials";
-import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
+import { Show, SignIn } from "@clerk/react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
@@ -86,7 +86,7 @@ function App() {
                     dividerText: "text-slate-400 text-[10px] uppercase font-bold tracking-widest",
                     identityPreviewText: "text-slate-900 font-semibold",
                   },
-                  layout: {
+                  options: {
                     socialButtonsPlacement: "bottom",
                     showOptionalFields: false,
                     helpPageUrl: "#",
@@ -114,10 +114,10 @@ function App() {
               <ProtectedRoutes />
             ) : (
               <>
-                <SignedIn>
+                <Show when="signed-in">
                   <ProtectedRoutes />
-                </SignedIn>
-                <SignedOut>
+                </Show>
+                <Show when="signed-out">
                   <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-violet-900 via-brand to-fuchsia-800 p-4 relative overflow-hidden">
                     <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2 w-[800px] h-[800px] bg-fuchsia-500/20 rounded-full blur-[120px]" />
                     <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-cyan-500/20 rounded-full blur-[120px]" />
@@ -135,7 +135,7 @@ function App() {
                       </div>
                     </div>
                   </div>
-                </SignedOut>
+                </Show>
               </>
             )
           }

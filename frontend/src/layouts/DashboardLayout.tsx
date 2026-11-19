@@ -11,7 +11,7 @@ import {
   Menu,
   X
 } from 'lucide-react';
-import { UserButton, useClerk } from '@clerk/clerk-react';
+import { UserButton, useClerk } from '@clerk/react';
 import { useCredentials } from '../lib/credentials';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -151,7 +151,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
               <span>New Interview</span>
             </Link>
             <div className="w-px h-6 bg-slate-200 mx-2" />
-            <UserButton afterSignOutUrl="/" />
+            <UserButton />
           </div>
         </div>
 

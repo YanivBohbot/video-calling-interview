@@ -8,7 +8,7 @@ import {
   StreamTheme,
   type Call,
 } from '@stream-io/video-react-sdk';
-import { useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Video, Code, PenTool, FileText, Loader2, Save, UserPlus, Check, Copy } from 'lucide-react';
 import { useApi } from '../lib/api';

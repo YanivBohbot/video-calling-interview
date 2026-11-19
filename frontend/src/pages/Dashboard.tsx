@@ -6,7 +6,7 @@ import {
   CalendarCheck, Radio, XCircle, Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/react';
 import { useApi } from '../lib/api';
 
 // ── Types ──────────────────────────────────────────────────

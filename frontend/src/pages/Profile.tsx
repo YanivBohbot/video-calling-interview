@@ -5,7 +5,7 @@ import {
   Edit3, Save, X, Loader2, CheckCircle, Video,
   Calendar, Clock, BarChart2,
 } from 'lucide-react';
-import { useUser } from '@clerk/clerk-react';
+import { useUser } from '@clerk/react';
 import { useNavigate } from 'react-router-dom';
 import { useApi } from '../lib/api';
 
