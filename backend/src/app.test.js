@@ -29,6 +29,29 @@ describe("createApp", () => {
     expect(res.body).toEqual(["module"]);
   });
 
+  it("sends security headers and hides the framework", async () => {
+    const res = await request(createApp(container())).get("/health");
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["x-frame-options"]).toBe("SAMEORIGIN");
+    expect(res.headers["x-powered-by"]).toBeUndefined();
+  });
+
+  it("rate-limits /api per client with a JSON 429", async () => {
+    const sessions = express.Router().get("/", (req, res) => res.json([]));
+    const app = createApp(container({ routers: { sessions } }), { apiRateLimit: { limit: 2, windowMs: 60_000 } });
+    expect((await request(app).get("/api/sessions")).status).toBe(200);
+    const second = await request(app).get("/api/sessions");
+    expect(second.headers["ratelimit-limit"]).toBe("2");
+    const third = await request(app).get("/api/sessions");
+    expect(third.status).toBe(429);
+    expect(third.body).toEqual({ message: "Too many requests, please try again later" });
+  });
+
+  it("never rate-limits /health", async () => {
+    const app = createApp(container(), { apiRateLimit: { limit: 1, windowMs: 60_000 } });
+    for (let i = 0; i < 3; i++) expect((await request(app).get("/health")).status).toBe(200);
+  });
+
   it("sends CORS headers for the configured client origin", async () => {
     const res = await request(createApp(container())).get("/health").set("Origin", "http://localhost:5174");
     expect(res.headers["access-control-allow-origin"]).toBe("http://localhost:5174");

@@ -46,16 +46,16 @@ docker compose up -d
 ```
 backend/src/
   server.js        boot only: loadConfig → createContainer → createApp → attachRealtime → listen (+ graceful shutdown)
-  app.js           createApp(container): json, cors, module routers, /health, JSON 404, central error handler
+  app.js           createApp(container): helmet, cors, /api rate limit (1000/15 min/IP), json, routers, /health, JSON 404, error handler
   container.js     composition root — picks implementations and wires repositories → services → controllers → routes
   config/env.js    loadConfig(env): zod-validated, never logged; failures name variables, never values
-  shared/          errors.js (AppError + subclasses), handle.js, errorHandler.js, mongoShape.js, prismaErrors.js, stats.js
+  shared/          errors.js (AppError + subclasses), handle.js, errorHandler.js, validate.js (zod middleware), mongoShape.js, prismaErrors.js, stats.js
   auth/            identity strategies (clerkHeaderStrategy) + requireIdentity middleware
   routes/          <x>.routes.js       — URL → controller (createXRouter)
   controllers/     <x>.controller.js   — HTTP in/out, Mongo-shaping (createXController)
   services/        <x>.service.js      — business rules, throw AppErrors (createXService)
   repositories/    <x>.repository.js   — the only Prisma callers, own select/include (createXRepository)
-  validators/      question.validation.js
+  validators/      <x>.schemas.js (zod request schemas, client-facing messages) + question.validation.js
                    features: interview, user, session, question (AI), stream
   tests/           cross-layer HTTP tests: buildTestApp() = real container over a stub prisma + fakes
   realtime/        Socket.io: attachRealtime, one handler per event, roomState, roomQuestions, flushScheduler
@@ -63,7 +63,7 @@ backend/src/
   lib/             db.js (prisma singleton), rateLimiter.js, seed.js
 ```
 
-Layer rules: routes only wire URLs; controllers read the request, call one service and shape the response (no Prisma); services hold the business rules and throw `AppError`s (no `req`/`res`); repositories are the only Prisma callers and own the `select`/`include` shapes. Every layer is a plain factory taking its dependencies as parameters (`createInterviewService({ interviewRepository, resolveInterviewerId })`), so tests inject fakes instead of using `vi.mock`. `createContainer({ config, prisma, generation?, identityStrategy?, getStreamClient?, now? })` accepts fakes for every external dependency. Controllers wrap each handler in `handle("<fallback message>", fn)`: unexpected errors become a 500 with that generic message and the detail is only logged — never put `err.message` in a response.
+Layer rules: routes wire URLs and request validation (`validate({ body | params | query })` with a schema from `validators/`); controllers read the request, call one service and shape the response (no Prisma); services hold the business rules and throw `AppError`s (no `req`/`res`); repositories are the only Prisma callers and own the `select`/`include` shapes. Every layer is a plain factory taking its dependencies as parameters (`createInterviewService({ interviewRepository, resolveInterviewerId })`), so tests inject fakes instead of using `vi.mock`. `createContainer({ config, prisma, generation?, identityStrategy?, getStreamClient?, now? })` accepts fakes for every external dependency. Controllers wrap each handler in `handle("<fallback message>", fn)`: unexpected errors become a 500 with that generic message and the detail is only logged — never put `err.message` in a response.
 
 ### The API still speaks Mongo-shaped JSON
 
