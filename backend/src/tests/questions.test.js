@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { buildTestApp, TEST_CONFIG } from "./testApp.js";
+import { buildTestApp, TEST_CONFIG, authAs } from "./testApp.js";
 import {
   AIConfigError,
   AIProviderError,
@@ -15,14 +15,6 @@ let generation;
 let config;
 let app;
 
-// Stand-in identity strategy: any x-clerk-id is a valid caller.
-const headerIdentity = {
-  resolveIdentity: async (req) => {
-    const clerkID = req.header("x-clerk-id");
-    return clerkID ? { id: `id-${clerkID}`, name: "U", email: "u@x", clerkID } : null;
-  },
-};
-
 // The real interview repository reads through prisma.interview.findUnique; this stub routes
 // the two query shapes it uses to two spies, so each case can say which lookup happened.
 const stubPrisma = () => ({
@@ -33,7 +25,7 @@ const stubPrisma = () => ({
 });
 
 const build = () => {
-  ({ app } = buildTestApp({ prisma: stubPrisma(), config, generation, identityStrategy: headerIdentity }));
+  ({ app } = buildTestApp({ prisma: stubPrisma(), config, generation }));
 };
 
 const generate = (id = "iv-1", clerk = "user-a") =>
@@ -111,7 +103,7 @@ describe("POST /api/interviews/:id/questions/generate", () => {
   });
 
   it("refuses callers without an identity", async () => {
-    const res = await request(app).post("/api/interviews/iv-1/questions/generate");
+    const res = await request(app).post("/api/interviews/iv-1/questions/generate").set(authAs(null));
     expect(res.status).toBe(401);
     expect(interviewRepository.findById).not.toHaveBeenCalled();
   });

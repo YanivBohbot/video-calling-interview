@@ -10,9 +10,44 @@ export const TEST_CONFIG = Object.freeze({
   demoTokenSecret: "test-demo-secret-0123456789abcdef0123",
 });
 
+// Ready-made principals for HTTP tests.
+export const PRINCIPALS = Object.freeze({
+  ada: { kind: "interviewer", userId: "u-ada", clerkId: "clerk_ada" },
+  bob: { kind: "interviewer", userId: "u-bob", clerkId: "clerk_bob" },
+  demo: { kind: "demo", userId: "u-demo", clerkId: "demo" },
+  candidateOf: (interviewId) => ({ kind: "candidate", interviewId }),
+});
+
+// Fake Clerk: the bearer "clerk:<clerkId>" verifies to that id; no network.
+export const fakeClerkVerifier = ({ profile = { name: "New User", email: "new@x.dev", profileImage: null } } = {}) => ({
+  verify: async (token) => (typeof token === "string" && token.startsWith("clerk:") ? { clerkId: token.slice(6) } : null),
+  fetchUser: async () => profile,
+});
+
+// Test-only identity: `Authorization: Bearer test-principal:<json>` is that principal
+// ("null" → no principal). Without the header, `defaultPrincipal` is used.
+const TEST_PREFIX = "test-principal:";
+export const authAs = (principal) => ({ Authorization: `Bearer ${TEST_PREFIX}${JSON.stringify(principal)}` });
+
+export const testIdentityResolver = (defaultPrincipal) => ({
+  fromRequest: async (req) => {
+    const auth = req.header("authorization") || "";
+    if (auth.startsWith(`Bearer ${TEST_PREFIX}`)) return JSON.parse(auth.slice(7 + TEST_PREFIX.length));
+    return defaultPrincipal;
+  },
+  fromCredentials: async () => defaultPrincipal,
+});
+
 // The real container (every repository, service, controller and router) over a stub
 // `prisma`, with optional fakes for the external dependencies the container accepts.
-export const buildTestApp = ({ prisma = {}, config = TEST_CONFIG, ...fakes } = {}) => {
-  const container = createContainer({ config, prisma, ...fakes });
-  return { app: createApp(container), container };
+// Requests act as `principal` (default: the demo owner) unless they send `authAs(...)`.
+export const buildTestApp = ({ prisma = {}, config = TEST_CONFIG, principal = PRINCIPALS.demo, appOptions, ...fakes } = {}) => {
+  const container = createContainer({
+    config,
+    prisma,
+    identityResolver: testIdentityResolver(principal),
+    clerkVerifier: fakeClerkVerifier(),
+    ...fakes,
+  });
+  return { app: createApp(container, appOptions), container };
 };

@@ -3,7 +3,9 @@ import express from "express";
 import request from "supertest";
 import { createApp } from "./app.js";
 
-const container = (extra = {}) => ({ config: { clientUrl: "http://localhost:5174" }, routers: {}, ...extra });
+// Every caller counts as authenticated here: these tests are about the app shell.
+const anyone = { resolver: { fromRequest: async () => ({ kind: "demo", userId: "u-demo", clerkId: "demo" }) } };
+const container = (extra = {}) => ({ config: { clientUrl: "http://localhost:5174" }, routers: {}, auth: anyone, ...extra });
 
 describe("createApp", () => {
   it("answers /health with the historical body", async () => {
@@ -50,6 +52,10 @@ describe("createApp", () => {
   it("never rate-limits /health", async () => {
     const app = createApp(container(), { apiRateLimit: { limit: 1, windowMs: 60_000 } });
     for (let i = 0; i < 3; i++) expect((await request(app).get("/health")).status).toBe(200);
+  });
+
+  it("refuses to build an app without an identity resolver (fail closed)", () => {
+    expect(() => createApp({ config: { clientUrl: "http://x" }, routers: {} })).toThrow(/resolver/);
   });
 
   it("sends CORS headers for the configured client origin", async () => {

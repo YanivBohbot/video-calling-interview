@@ -3,7 +3,7 @@ import { toInterviewDoc } from "../shared/mongoShape.js";
 
 export const createQuestionController = ({ questionService }) => ({
   generate: handle("Failed to generate questions", async (req, res) => {
-    const identityKey = req.user?.clerkID || req.user?.id || "anon";
+    const identityKey = req.principal.clerkId ?? req.principal.userId;
     const result = await questionService.generate({ interviewId: req.params.id, identityKey });
     res.status(200).json(result);
   }),
