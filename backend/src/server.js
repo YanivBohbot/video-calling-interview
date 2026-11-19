@@ -23,7 +23,7 @@ const realtime = attachRealtime({
   httpServer,
   clientUrl: config.clientUrl,
   interviewStore: prisma.interview,
-  findCodeSnapshot: container.modules.interviews.interviewRepository.findCodeSnapshot,
+  findCodeSnapshot: container.repositories.interview.findCodeSnapshot,
 });
 
 let shuttingDown = false;

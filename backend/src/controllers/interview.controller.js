@@ -1,5 +1,5 @@
-import { handle } from "../../shared/handle.js";
-import { toInterviewDoc } from "../../shared/mongoShape.js";
+import { handle } from "../shared/handle.js";
+import { toInterviewDoc } from "../shared/mongoShape.js";
 
 export const createInterviewController = ({ interviewService }) => ({
   list: handle("Error fetching interviews", async (req, res) => {

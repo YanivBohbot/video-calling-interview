@@ -1,4 +1,4 @@
-import { translatePrismaError } from "../../shared/prismaErrors.js";
+import { translatePrismaError } from "../shared/prismaErrors.js";
 
 export const USER_SELECT = {
   id: true,

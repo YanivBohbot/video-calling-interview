@@ -1,4 +1,4 @@
-import { NotFoundError } from "../../shared/errors.js";
+import { NotFoundError } from "../shared/errors.js";
 
 export const createSessionService = ({ sessionRepository }) => ({
   listSessions: () => sessionRepository.findAll(),

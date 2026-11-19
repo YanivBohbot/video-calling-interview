@@ -1,5 +1,5 @@
 import express from "express";
-import { requireIdentity } from "../../auth/requireIdentity.js";
+import { requireIdentity } from "../auth/requireIdentity.js";
 
 // Mounted at /api/interviews/:id/questions — mergeParams exposes :id to the handlers.
 export const createQuestionRouter = ({ questionController, identityStrategy }) => {

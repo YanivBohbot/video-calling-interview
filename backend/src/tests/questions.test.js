@@ -1,16 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { createApp } from "../../app.js";
-import { createQuestionsModule } from "./index.js";
-import { createRateLimiter } from "../../lib/rateLimiter.js";
+import { buildTestApp, TEST_CONFIG } from "./testApp.js";
 import {
   AIConfigError,
   AIProviderError,
   UnknownJobError,
-} from "../../agents/questionGenerator/errors.js";
+} from "../agents/questionGenerator/errors.js";
 
 // Ported from the pre-refactor aiController tests (same 12 cases), now driven over HTTP
-// through the real questions module with fake collaborators injected — no vi.mock.
+// through the real container, with fakes injected for the AI pipeline and identity — no vi.mock.
 
 let interviewRepository;
 let generation;
@@ -25,16 +23,17 @@ const headerIdentity = {
   },
 };
 
-const build = (overrides = {}) => {
-  const questions = createQuestionsModule({
-    interviewRepository,
-    generation,
-    rateLimiter: createRateLimiter({ max: 10, windowMs: 60 * 60 * 1000 }),
-    config,
-    identityStrategy: headerIdentity,
-    ...overrides,
-  });
-  app = createApp({ config: { clientUrl: "http://x" }, routers: { questions: questions.router } });
+// The real interview repository reads through prisma.interview.findUnique; this stub routes
+// the two query shapes it uses to two spies, so each case can say which lookup happened.
+const stubPrisma = () => ({
+  interview: {
+    findUnique: (args) =>
+      args.include ? interviewRepository.findByIdWithInterviewer(args.where.id) : interviewRepository.findById(args.where.id),
+  },
+});
+
+const build = () => {
+  ({ app } = buildTestApp({ prisma: stubPrisma(), config, generation, identityStrategy: headerIdentity }));
 };
 
 const generate = (id = "iv-1", clerk = "user-a") =>
@@ -45,7 +44,7 @@ const approve = (body, id = "iv-1") =>
 beforeEach(() => {
   interviewRepository = { findById: vi.fn(), findByIdWithInterviewer: vi.fn() };
   generation = { start: vi.fn(), resume: vi.fn() };
-  config = { openaiApiKey: "sk-test", aiQuestionCount: 6 };
+  config = TEST_CONFIG;
   build();
 });
 
@@ -58,7 +57,7 @@ describe("POST /api/interviews/:id/questions/generate", () => {
   });
 
   it("returns 500 when OPENAI_API_KEY is missing", async () => {
-    config = { aiQuestionCount: 6 };
+    config = { ...TEST_CONFIG, openaiApiKey: undefined };
     build();
     interviewRepository.findById.mockResolvedValue({ id: "iv-1", role: "x", interviewType: "technical" });
     const res = await generate("iv-1", "user-nokey");

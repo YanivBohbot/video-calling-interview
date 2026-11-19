@@ -1,5 +1,5 @@
-import { handle } from "../../shared/handle.js";
-import { toDoc } from "../../shared/mongoShape.js";
+import { handle } from "../shared/handle.js";
+import { toDoc } from "../shared/mongoShape.js";
 
 export const createSessionController = ({ sessionService }) => ({
   list: handle("Fetch sessions failed", async (req, res) => {

@@ -1,5 +1,5 @@
-import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors.js";
-import { averageDuration } from "../../shared/stats.js";
+import { ConflictError, NotFoundError, ValidationError } from "../shared/errors.js";
+import { averageDuration } from "../shared/stats.js";
 
 const ZERO_STATS = { total: 0, completed: 0, scheduled: 0, cancelled: 0, live: 0, avgDuration: 0 };
 

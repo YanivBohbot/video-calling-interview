@@ -1,15 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { createApp } from "../../app.js";
-import { createSessionsModule } from "./index.js";
+import { buildTestApp } from "./testApp.js";
 
 let prisma;
 let app;
 
 beforeEach(() => {
   prisma = { session: { findMany: vi.fn(), findUnique: vi.fn() } };
-  const sessions = createSessionsModule({ prisma });
-  app = createApp({ config: { clientUrl: "http://x" }, routers: { sessions: sessions.router } });
+  ({ app } = buildTestApp({ prisma }));
 });
 
 describe("GET /api/sessions", () => {

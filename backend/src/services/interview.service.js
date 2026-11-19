@@ -1,6 +1,6 @@
-import { NotFoundError, ValidationError } from "../../shared/errors.js";
-import { averageDuration } from "../../shared/stats.js";
-import { validateQuestionsPayload } from "../questions/question.validation.js";
+import { NotFoundError, ValidationError } from "../shared/errors.js";
+import { averageDuration } from "../shared/stats.js";
+import { validateQuestionsPayload } from "../validators/question.validation.js";
 
 const STATUSES = ["scheduled", "live", "completed", "cancelled"];
 const RECENT_ACTIVITY_COUNT = 8;

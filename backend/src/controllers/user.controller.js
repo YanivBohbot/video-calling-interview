@@ -1,5 +1,5 @@
-import { handle } from "../../shared/handle.js";
-import { toUserDoc } from "../../shared/mongoShape.js";
+import { handle } from "../shared/handle.js";
+import { toUserDoc } from "../shared/mongoShape.js";
 
 export const createUserController = ({ userService }) => ({
   list: handle("Fetch users failed", async (req, res) => {

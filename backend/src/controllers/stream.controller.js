@@ -1,5 +1,5 @@
-import { handle } from "../../shared/handle.js";
-import { ValidationError } from "../../shared/errors.js";
+import { handle } from "../shared/handle.js";
+import { ValidationError } from "../shared/errors.js";
 
 export const createStreamController = ({ streamService }) => ({
   token: handle("Internal server error", async (req, res) => {

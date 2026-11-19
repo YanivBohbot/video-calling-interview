@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { createApp } from "../../app.js";
-import { createStreamModule } from "./index.js";
+import { buildTestApp } from "./testApp.js";
 
 const NOW_MS = 1_700_000_000_000;
 const NOW_S = 1_700_000_000;
@@ -13,8 +12,7 @@ let app;
 beforeEach(() => {
   streamClient = { generateUserToken: vi.fn().mockReturnValue("fake-token") };
   getStreamClient = vi.fn(() => streamClient);
-  const stream = createStreamModule({ getStreamClient, now: () => NOW_MS });
-  app = createApp({ config: { clientUrl: "http://x" }, routers: { stream: stream.router } });
+  ({ app } = buildTestApp({ getStreamClient, now: () => NOW_MS }));
 });
 
 describe("GET /api/stream/token", () => {

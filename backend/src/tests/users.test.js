@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { createApp } from "../../app.js";
-import { createUsersModule } from "./index.js";
-import { createUserService } from "./user.service.js";
-import { USER_SELECT } from "./user.repository.js";
-import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors.js";
+import { buildTestApp } from "./testApp.js";
+import { createUserService } from "../services/user.service.js";
+import { USER_SELECT } from "../repositories/user.repository.js";
+import { ConflictError, NotFoundError, ValidationError } from "../shared/errors.js";
 
 const ZERO_STATS = { total: 0, completed: 0, scheduled: 0, cancelled: 0, live: 0, avgDuration: 0 };
 
@@ -119,8 +118,7 @@ beforeEach(() => {
     user: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), upsert: vi.fn() },
     interview: { count: vi.fn(), findMany: vi.fn() },
   };
-  const users = createUsersModule({ prisma });
-  app = createApp({ config: { clientUrl: "http://x" }, routers: { users: users.router } });
+  ({ app } = buildTestApp({ prisma }));
 });
 
 describe("users HTTP contract", () => {

@@ -3,9 +3,9 @@ import {
   AIInvalidResponseError,
   AIProviderError,
   UnknownJobError,
-} from "../../agents/questionGenerator/errors.js";
-import { AppError, NotFoundError, RateLimitError, UpstreamError, ValidationError } from "../../shared/errors.js";
-import { validateQuestionsPayload } from "./question.validation.js";
+} from "../agents/questionGenerator/errors.js";
+import { AppError, NotFoundError, RateLimitError, UpstreamError, ValidationError } from "../shared/errors.js";
+import { validateQuestionsPayload } from "../validators/question.validation.js";
 
 // Generation errors: config problems are shown, provider failures are a 502.
 const toGenerateError = (err) => {

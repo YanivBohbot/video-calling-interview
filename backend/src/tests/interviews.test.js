@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { createApp } from "../../app.js";
-import { createInterviewsModule } from "./index.js";
-import { createInterviewService } from "./interview.service.js";
-import { INTERVIEW_LIST_SELECT, INTERVIEWER_SELECT } from "./interview.repository.js";
-import { NotFoundError, ValidationError } from "../../shared/errors.js";
+import { buildTestApp } from "./testApp.js";
+import { createInterviewService } from "../services/interview.service.js";
+import { INTERVIEW_LIST_SELECT, INTERVIEWER_SELECT } from "../repositories/interview.repository.js";
+import { NotFoundError, ValidationError } from "../shared/errors.js";
 
 const WITH_INTERVIEWER = { interviewer: { select: INTERVIEWER_SELECT } };
 const INTERVIEWER = { id: "u1", name: "Ada", email: "ada@x", clerkId: "c1" };
@@ -113,7 +112,6 @@ describe("interviewService", () => {
 
 let prisma;
 let app;
-let resolveInterviewerId;
 
 beforeEach(() => {
   prisma = {
@@ -125,11 +123,13 @@ beforeEach(() => {
       delete: vi.fn(),
       count: vi.fn().mockResolvedValue(0),
     },
-    user: { count: vi.fn().mockResolvedValue(0) },
+    user: {
+      count: vi.fn().mockResolvedValue(0),
+      // Interviewer lookup goes through the real user service: "ghost" is unknown.
+      findUnique: vi.fn(async ({ where }) => (where.clerkId === "ghost" ? null : { id: `id-of-${where.clerkId}` })),
+    },
   };
-  resolveInterviewerId = vi.fn(async (raw) => (raw === "ghost" ? null : `id-of-${raw}`));
-  const interviews = createInterviewsModule({ prisma, resolveInterviewerId });
-  app = createApp({ config: { clientUrl: "http://x" }, routers: { interviews: interviews.router } });
+  ({ app } = buildTestApp({ prisma }));
 });
 
 describe("interviews HTTP contract", () => {
@@ -156,7 +156,7 @@ describe("interviews HTTP contract", () => {
 
   it("the x-clerk-id header wins over ?interviewerId", async () => {
     await request(app).get("/api/interviews?interviewerId=b").set("x-clerk-id", "a");
-    expect(resolveInterviewerId).toHaveBeenCalledWith("a");
+    expect(prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { clerkId: "a" } }));
     expect(prisma.interview.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { interviewerId: "id-of-a" } }));
   });
 
@@ -198,7 +198,7 @@ describe("interviews HTTP contract", () => {
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ _id: "iv1", interviewerId: NESTED });
     expect(prisma.interview.create).toHaveBeenCalledWith(expect.objectContaining({ include: WITH_INTERVIEWER }));
-    expect(resolveInterviewerId).toHaveBeenCalledWith("c1");
+    expect(prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { clerkId: "c1" } }));
   });
 
   it("POST with an unknown interviewer answers 400 Interviewer not found", async () => {
