@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { StateGraph, START, END, MemorySaver, Command } from "@langchain/langgraph";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { createAgent } from "langchain";
-import { prisma } from "../../db.js";
+import { prisma } from "../../lib/db.js";
 import { getLeetCodeTools } from "../leetcodeMcpClient.js";
 import { QuestionGenState, DraftResponseSchema, SearchQuerySchema } from "./state.js";
 import { buildResearcherPrompt, buildDrafterPrompt } from "./prompts.js";

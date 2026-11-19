@@ -3,7 +3,7 @@ import { createRateLimiter } from "./lib/rateLimiter.js";
 import {
   startQuestionGeneration,
   resumeQuestionGeneration,
-} from "./lib/agents/questionGenerator/graph.js";
+} from "./agents/questionGenerator/graph.js";
 import { createSessionsModule } from "./modules/sessions/index.js";
 import { createUsersModule } from "./modules/users/index.js";
 import { createInterviewsModule } from "./modules/interviews/index.js";

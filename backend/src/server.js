@@ -5,8 +5,8 @@ import { connectDB, prisma } from "./lib/db.js";
 import { createContainer } from "./container.js";
 import { createApp } from "./app.js";
 import { attachRealtime } from "./realtime/index.js";
-import { getLeetCodeTools } from "./lib/agents/leetcodeMcpClient.js";
-import { ensureCheckpointerTables } from "./lib/agents/questionGenerator/graph.js";
+import { getLeetCodeTools } from "./agents/leetcodeMcpClient.js";
+import { ensureCheckpointerTables } from "./agents/questionGenerator/graph.js";
 
 let config;
 try {

@@ -3,7 +3,7 @@ import {
   AIInvalidResponseError,
   AIProviderError,
   UnknownJobError,
-} from "../../lib/agents/questionGenerator/errors.js";
+} from "../../agents/questionGenerator/errors.js";
 import { AppError, NotFoundError, RateLimitError, UpstreamError, ValidationError } from "../../shared/errors.js";
 import { validateQuestionsPayload } from "./question.validation.js";
 

@@ -22,8 +22,9 @@ npm run db:migrate       # prisma migrate dev
 npm run db:generate      # prisma generate
 npm run seed             # wipes and reseeds users/sessions/interviews (src/lib/seed.js)
 npx prisma studio        # visual DB browser
+npm test                 # vitest run (unit + Supertest HTTP contract tests, no DB needed)
 ```
-There is no lint or test script in `backend/package.json` yet. The AI-question-generator plan (see below) proposes adding Vitest, but that has not been implemented — don't assume `backend/src/lib/ai.js` or a test runner exists without checking first.
+There is no lint script in `backend/package.json`.
 
 **Frontend** (React 19 + Vite + TS, port 5173 by default)
 ```bash
@@ -40,22 +41,38 @@ docker compose up -d
 
 ## Architecture
 
-### Backend is Prisma/Postgres; the API still speaks Mongo-shaped JSON
+### Backend layout: feature modules wired by one composition root
 
-The backend used to run on MongoDB/Mongoose (the old `backend/src/models/*.js` files) and has been migrated to Prisma + PostgreSQL. To avoid a breaking change to the frontend's existing contract, `backend/src/controllers/controller.js` translates every Prisma record before it leaves the API: `toDoc` / `toUserDoc` / `toInterviewDoc` rename Prisma's `id` → `_id` and `clerkId` → `clerkID`, and reshape `interview.interviewer` into a nested `interviewerId: { _id, name, email, clerkID }` object. When adding new fields or endpoints, follow this same shim pattern rather than exposing raw Prisma field names — the frontend expects the Mongo-style shape.
+```
+backend/src/
+  server.js        boot only: loadConfig → createContainer → createApp → attachRealtime → listen (+ graceful shutdown)
+  app.js           createApp(container): json, cors, module routers, /health, JSON 404, central error handler
+  container.js     composition root — the only file that picks implementations (prisma, identity strategy, Stream client…)
+  config/env.js    loadConfig(env): zod-validated, never logged; failures name variables, never values
+  shared/          errors.js (AppError + subclasses), handle.js, errorHandler.js, mongoShape.js, prismaErrors.js, stats.js
+  auth/            identity strategies (clerkHeaderStrategy) + requireIdentity middleware
+  modules/<feature>/  <x>.routes · <x>.controller · <x>.service · <x>.repository · index.js (createXModule)
+                   features: interviews, users, sessions, questions (AI), stream
+  realtime/        Socket.io: attachRealtime, one handler per event, roomState, roomQuestions, flushScheduler
+  agents/          LangGraph question-generator pipeline + LeetCode MCP client
+  lib/             db.js (prisma singleton), rateLimiter.js, seed.js
+```
 
-Everything (routes, controllers) is centralized: there is one `controller.js` with all handlers, and one `db.js` exporting a single `prisma` client singleton. There's no service/repository layer.
+Layer rules: routes only wire URLs; controllers read the request, call one service and shape the response (no Prisma); services hold the business rules and throw `AppError`s (no `req`/`res`); repositories are the only Prisma callers and own the `select`/`include` shapes. Every layer is a plain factory taking its dependencies as parameters (`createInterviewService({ interviewRepository, resolveInterviewerId })`), so tests inject fakes instead of using `vi.mock`. Controllers wrap each handler in `handle("<fallback message>", fn)`: unexpected errors become a 500 with that generic message and the detail is only logged — never put `err.message` in a response.
 
-### Auth: two headers, and route protection is not wired up
+### The API still speaks Mongo-shaped JSON
 
-- Primary: `x-clerk-id` header carrying the user's Clerk ID.
-- Fallback: `Authorization: Bearer user:<clerkId>` (used for demo/local dev without Clerk).
-- The special clerkId value `"demo"` is auto-upserted into a "Demo User" row on first use (see `resolveInterviewerId` in `controller.js`) — this backs the "Guest Mode" button on the sign-in page.
-- `backend/src/middlewares/protectRoute.js` implements this resolution as Express middleware, but **it is not currently attached to any router** (`interview.routes.js`, `user.routes.js`, `session.routes.js` call controllers directly). Auth-like header parsing happens ad hoc inside individual controller functions (e.g. `resolveInterviewerId`) instead. Keep this in mind before assuming a route is protected.
+The backend used to run on MongoDB/Mongoose and was migrated to Prisma + PostgreSQL. To avoid a breaking change to the frontend's contract, controllers pass every record through `shared/mongoShape.js`: `toDoc` / `toUserDoc` / `toInterviewDoc` rename `id` → `_id` and `clerkId` → `clerkID`, and reshape `interview.interviewer` into a nested `interviewerId: { _id, name, email, clerkID }` object. When adding fields or endpoints, follow this shim rather than exposing raw Prisma field names. Known quirk kept on purpose: `PATCH /api/interviews/:id/status` returns `interviewerId` as a plain id (no include).
+
+### Auth: one replaceable identity strategy, most routes still open
+
+- `auth/clerkHeaderStrategy.js` resolves the caller from the `x-clerk-id` header, falling back to `Authorization: Bearer user:<clerkId>`. It trusts the header without verification (spoofable) — real auth (OAuth, replacing Clerk) is planned as a separate project: write a new strategy with the same `resolveIdentity(req)` contract and swap it in `container.js`.
+- Only `POST /api/interviews/:id/questions/generate|approve` use `requireIdentity`. **All other routes are unprotected** and have no ownership checks.
+- The special clerkId `"demo"` is auto-upserted into a "Demo User" row on first use (`userService.resolveInterviewerId`) — this backs "Guest Mode".
 
 ### Real-time collaboration is a second, parallel channel
 
-`server.js` creates a Socket.io server alongside the Express app (not under `/api`). Rooms are joined by interview ID; `CollaborativeEditor.tsx` connects directly to `http://localhost:3001` (hardcoded, not env-driven) and emits/listens on `join-room`, `code-change`/`code-update`, `language-change`/`language-update`, `code-execution`/`execution-result`. This is presence/broadcast only — no state is persisted server-side; a client refresh loses in-progress edits until another peer re-broadcasts.
+`realtime/index.js` attaches Socket.io to the same HTTP server (not under `/api`). Rooms are joined by interview ID; `CollaborativeEditor.tsx` connects to `http://localhost:3001` (hardcoded) and uses `join-room`, `code-change`/`code-update`, `language-change`/`language-update`, `question-change`/`question-update`, `code-execution`/`execution-result`. Events from a socket that hasn't joined the room are ignored. Code is autosaved to `Interview.codeSnapshot` every 10 s, when the last participant leaves, and on SIGINT/SIGTERM; a rejoining client gets the current question, then live code (or the saved snapshot).
 
 Code execution (the "Run" button) calls the public Piston API (`emkc.org`) directly from the frontend — it is not proxied through the backend.
 
