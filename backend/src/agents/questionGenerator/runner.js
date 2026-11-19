@@ -9,8 +9,14 @@ const passThrough = (err) => err instanceof AIInvalidResponseError || err instan
 // interrupt) and resume it with the interviewer's decision. A job is one LangGraph
 // thread, addressed as `${interviewId}:${jobId}` — a jobId minted for one interview
 // resolves to nothing for any other.
-export const createQuestionGenerator = ({ graph }) => {
-  const threadConfig = (interviewId, jobId) => ({ configurable: { thread_id: `${interviewId}:${jobId}` } });
+//
+// `graph` is the compiled workflow (agent.js); `context` its runtime dependencies
+// (QuestionGenContext), passed on every invoke — start, resume and the finalize retry.
+export const createQuestionGenerator = ({ graph, context }) => {
+  const threadConfig = (interviewId, jobId) => ({
+    configurable: { thread_id: `${interviewId}:${jobId}` },
+    context,
+  });
 
   const start = async ({ interviewId, role, interviewType, count }) => {
     const jobId = crypto.randomUUID();

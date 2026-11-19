@@ -55,6 +55,18 @@ export const SearchQuerySchema = z.object({
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
 });
 
+// Runtime context (LangGraph `contextSchema`): the run's dependencies. Passed as
+// `{ context }` on every invoke by runner.js, read by nodes as `runtime.context`,
+// and never written to a checkpoint.
+const fn = () => z.custom((v) => typeof v === "function", { message: "must be a function" });
+export const QuestionGenContext = z.object({
+  chooseSearch: fn(), // ({ role, interviewType }) → LeetCode search filters  (models.js)
+  searchProblems: fn(), // (filters) → [{ slug, title, difficulty }]          (tools.js)
+  draft: fn(), // ({ useFallbackModel, prompt }) → { questions }                 (models.js)
+  saveQuestions: fn(), // (interviewId, questions) → void          (interview repository)
+  random: fn().optional(), // () → [0, 1); defaults to Math.random (tests pin it)
+});
+
 export const QuestionGenState = new StateSchema({
   interviewId: z.string(),
   role: z.string(),

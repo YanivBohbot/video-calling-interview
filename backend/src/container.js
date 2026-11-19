@@ -1,10 +1,9 @@
 import { StreamClient } from "@stream-io/node-sdk";
 import { createRateLimiter } from "./lib/rateLimiter.js";
-import { createLeetCodeTools } from "./agents/leetcodeMcpClient.js";
-import { createQuestionModels } from "./agents/questionGenerator/models.js";
-import { createSearchProblems } from "./agents/questionGenerator/leetcodeSearch.js";
+import { workflow } from "./agents/questionGenerator/agent.js";
+import { createLeetCodeTools, createSearchProblems } from "./agents/questionGenerator/utils/tools.js";
+import { createQuestionModels } from "./agents/questionGenerator/utils/models.js";
 import { createCheckpointer } from "./agents/questionGenerator/checkpointer.js";
-import { buildGraph } from "./agents/questionGenerator/graph.js";
 import { createQuestionGenerator } from "./agents/questionGenerator/runner.js";
 import { createClerkVerifier } from "./auth/clerkVerifier.js";
 import { createDemoTokens } from "./auth/demoTokens.js";
@@ -73,14 +72,15 @@ export const createContainer = ({
       const leetcode = createLeetCodeTools({ createClient: aiOptions.createMcpClient });
       const models = createQuestionModels({ model: config.aiModel, fallbackModel: config.aiModelFallback });
       const checkpointer = createCheckpointer({ connectionString: config.databaseUrl });
-      const graph = buildGraph({
-        checkpointer,
+      const graph = workflow.compile({ checkpointer });
+      // The graph's runtime context (QuestionGenContext): what the nodes call.
+      const context = {
         chooseSearch: models.chooseSearch,
         searchProblems: createSearchProblems({ getTools: leetcode.getTools }),
         draft: models.draft,
         saveQuestions: repositories.interview.saveQuestions,
-      });
-      aiStack = { leetcode, checkpointer, generator: createQuestionGenerator({ graph }) };
+      };
+      aiStack = { leetcode, checkpointer, generator: createQuestionGenerator({ graph, context }) };
     }
     return aiStack;
   };

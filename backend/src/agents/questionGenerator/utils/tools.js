@@ -1,4 +1,8 @@
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
+import { parseSearchProblems } from "./sources.js";
+
+// The graph's tools (the doc's utils/tools): the LeetCode MCP server, through the
+// official @langchain/mcp-adapters client, and the one search the researcher runs.
 
 // Pinned (1.5.1 = the version verified working; 1.4.0 no longer starts — a dependency moved).
 // The MCP server is downloaded by npx at runtime, so an unpinned name would run
@@ -57,4 +61,13 @@ export const createLeetCodeTools = ({ createClient = createDefaultClient } = {})
   };
 
   return { getTools, close };
+};
+
+// Runs the LeetCode MCP `search_problems` tool directly (code, not the model, calls it:
+// an agent tool loop ignored offsets and hit its step limit) and parses its JSON.
+export const createSearchProblems = ({ getTools }) => async ({ tags, ...params }) => {
+  const search = (await getTools()).find((t) => t.name === "search_problems");
+  if (!search) throw new Error("LeetCode search_problems tool unavailable");
+  const raw = await search.invoke(tags?.length ? { ...params, tags } : params);
+  return parseSearchProblems(raw);
 };

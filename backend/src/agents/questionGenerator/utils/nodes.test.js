@@ -2,14 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 import { Command } from "@langchain/langgraph";
 import {
   distributeCounts,
-  makePlannerNode,
-  makeResearcherNode,
-  makeDrafterNode,
+  plannerNode,
+  researcherNode,
+  drafterNode,
   validatorNode,
   fallbackNode,
-  makeFinalizeNode,
+  finalizeNode,
 } from "./nodes.js";
-import { AIInvalidResponseError } from "./errors.js";
+import { AIInvalidResponseError } from "../errors.js";
+
+// Runs a node the way LangGraph does: (state, runtime) with the given runtime context.
+const withContext = (node, context = {}) => (state) => node(state, { context });
 
 describe("distributeCounts", () => {
   it("splits counts proportionally and sums to the total, largest remainder first", () => {
@@ -20,15 +23,15 @@ describe("distributeCounts", () => {
 });
 
 describe("planner node", () => {
-  const plannerNode = makePlannerNode();
+  const planner = withContext(plannerNode);
 
   it("biases toward behavioral for a behavioral interview", async () => {
-    const result = await plannerNode({ interviewType: "behavioral", count: 6 });
+    const result = await planner({ interviewType: "behavioral", count: 6 });
     expect(result).toEqual({ plan: { categoryCounts: { behavioral: 4, technical: 2, "system-design": 0 } } });
   });
 
   it("defaults to the technical weighting for an unknown interviewType", async () => {
-    const result = await plannerNode({ interviewType: "unknown-type", count: 6 });
+    const result = await planner({ interviewType: "unknown-type", count: 6 });
     expect(result.plan.categoryCounts.technical).toBeGreaterThan(result.plan.categoryCounts.behavioral);
   });
 });
@@ -45,7 +48,7 @@ describe("researcher node", () => {
 
   it("skips research entirely when the plan has no technical questions", async () => {
     const chooseSearch = vi.fn();
-    const node = makeResearcherNode({ chooseSearch, searchProblems: vi.fn() });
+    const node = withContext(researcherNode, { chooseSearch, searchProblems: vi.fn() });
     expect(await node({ plan: { categoryCounts: { technical: 0, behavioral: 6 } } })).toEqual({ research: [] });
     expect(chooseSearch).not.toHaveBeenCalled();
   });
@@ -53,7 +56,7 @@ describe("researcher node", () => {
   it("asks the model for filters, then searches with them, a bounded random offset and room to sample", async () => {
     const chooseSearch = vi.fn().mockResolvedValue(query);
     const searchProblems = vi.fn().mockResolvedValue(problems(9));
-    const node = makeResearcherNode({ chooseSearch, searchProblems, random: () => 0.999 });
+    const node = withContext(researcherNode, { chooseSearch, searchProblems, random: () => 0.999 });
     await node(state(3, "Junior Frontend Engineer"));
     expect(chooseSearch).toHaveBeenCalledWith({ role: "Junior Frontend Engineer", interviewType: "technical" });
     expect(searchProblems).toHaveBeenCalledWith({ ...query, offset: 20, limit: 9 });
@@ -61,7 +64,7 @@ describe("researcher node", () => {
 
   it("returns exactly the technical count of distinct problems from the results", async () => {
     const found = [...problems(6), problems(1)[0]];
-    const node = makeResearcherNode({
+    const node = withContext(researcherNode, {
       chooseSearch: async () => query,
       searchProblems: async () => found,
       random: () => 0.3,
@@ -74,7 +77,7 @@ describe("researcher node", () => {
 
   it("samples differently for different random draws (Regenerate gives new problems)", async () => {
     const run = async (r) => {
-      const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems: async () => problems(12), random: () => r });
+      const node = withContext(researcherNode, { chooseSearch: async () => query, searchProblems: async () => problems(12), random: () => r });
       return (await node(state(4))).research.map((p) => p.slug).join(",");
     };
     expect(await run(0.1)).not.toBe(await run(0.9));
@@ -82,7 +85,7 @@ describe("researcher node", () => {
 
   it("falls back to offset 0, then to fewer filters, when a search comes back empty", async () => {
     const searchProblems = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValue(problems(5));
-    const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems, random: () => 0.5 });
+    const node = withContext(researcherNode, { chooseSearch: async () => query, searchProblems, random: () => 0.5 });
     const { research } = await node(state(2));
     expect(research).toHaveLength(2);
     // Only the exact-filter retry resets to offset 0; broader searches keep the random
@@ -103,7 +106,7 @@ describe("researcher node", () => {
       .mockResolvedValueOnce(problems(1, "narrow"))
       .mockResolvedValueOnce(problems(2, "broad"))
       .mockResolvedValue(problems(5, "general"));
-    const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems, random: () => 0 });
+    const node = withContext(researcherNode, { chooseSearch: async () => query, searchProblems, random: () => 0 });
     const { research } = await node(state(4));
     expect(research).toHaveLength(4);
     expect(new Set(research.map((p) => p.slug)).size).toBe(4);
@@ -112,19 +115,19 @@ describe("researcher node", () => {
 
   it("stops searching once the first search already has enough", async () => {
     const searchProblems = vi.fn().mockResolvedValue(problems(9));
-    const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems });
+    const node = withContext(researcherNode, { chooseSearch: async () => query, searchProblems });
     await node(state(3));
     expect(searchProblems).toHaveBeenCalledTimes(1);
   });
 
   it("returns no research when every search is empty", async () => {
-    const node = makeResearcherNode({ chooseSearch: async () => query, searchProblems: async () => [] });
+    const node = withContext(researcherNode, { chooseSearch: async () => query, searchProblems: async () => [] });
     expect(await node(state(2))).toEqual({ research: [] });
   });
 
   it("does not throw when the LeetCode MCP connection is unavailable", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const node = makeResearcherNode({
+    const node = withContext(researcherNode, {
       chooseSearch: async () => query,
       searchProblems: async () => {
         throw new Error("MCP connection failed");
@@ -136,7 +139,7 @@ describe("researcher node", () => {
 
   it("logs the error when it degrades, so a persistent failure is visible", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const node = makeResearcherNode({
+    const node = withContext(researcherNode, {
       chooseSearch: async () => {
         throw new Error("400 Invalid schema");
       },
@@ -153,7 +156,7 @@ describe("drafter node", () => {
 
   it("returns the model's drafted questions and passes the fallback flag through", async () => {
     const draft = vi.fn().mockResolvedValue({ questions: sampleQuestions });
-    const node = makeDrafterNode({ draft });
+    const node = withContext(drafterNode, { draft });
     const result = await node({
       plan: { categoryCounts: { technical: 1 } },
       research: [],
@@ -168,7 +171,7 @@ describe("drafter node", () => {
 
   it("includes research notes and the requested count in the user message", async () => {
     const draft = vi.fn().mockResolvedValue({ questions: sampleQuestions });
-    const node = makeDrafterNode({ draft });
+    const node = withContext(drafterNode, { draft });
     await node({
       plan: { categoryCounts: { technical: 1 } },
       research: [{ slug: "two-sum", title: "Two Sum", difficulty: "Easy" }],
@@ -190,7 +193,7 @@ describe("drafter node", () => {
         { text: "Tell me about a conflict", category: "behavioral", difficulty: "easy", sourceSlug: "rank-scores" },
       ],
     });
-    const node = makeDrafterNode({ draft });
+    const node = withContext(drafterNode, { draft });
     const { draftQuestions } = await node({
       plan: { categoryCounts: { technical: 1, behavioral: 1 } },
       research: [{ slug: "rank-scores", title: "Rank Scores", difficulty: "Medium" }],
@@ -212,7 +215,7 @@ describe("drafter node", () => {
 
   it("tells the model what was wrong with its previous draft on a retry", async () => {
     const draft = vi.fn().mockResolvedValue({ questions: sampleQuestions });
-    const node = makeDrafterNode({ draft });
+    const node = withContext(drafterNode, { draft });
     await node({
       plan: { categoryCounts: { technical: 1 } },
       research: [],
@@ -323,7 +326,7 @@ describe("fallback node", () => {
 describe("finalize node", () => {
   it("persists the approved (edited) questions, not the original draft", async () => {
     const saveQuestions = vi.fn().mockResolvedValue({});
-    const node = makeFinalizeNode({ saveQuestions });
+    const node = withContext(finalizeNode, { saveQuestions });
     const edited = [{ text: "Edited question", category: "technical", difficulty: "hard" }];
     await node({
       interviewId: "iv-1",
@@ -335,7 +338,7 @@ describe("finalize node", () => {
 
   it("falls back to the original draft when approval carries no edited questions", async () => {
     const saveQuestions = vi.fn().mockResolvedValue({});
-    const node = makeFinalizeNode({ saveQuestions });
+    const node = withContext(finalizeNode, { saveQuestions });
     const draft = [{ text: "Original", category: "technical", difficulty: "easy" }];
     await node({ interviewId: "iv-1", draftQuestions: draft, approval: { approved: true } });
     expect(saveQuestions).toHaveBeenCalledWith("iv-1", draft);

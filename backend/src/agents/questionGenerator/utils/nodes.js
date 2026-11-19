@@ -1,5 +1,5 @@
 import { Command, END, interrupt } from "@langchain/langgraph";
-import { AIInvalidResponseError } from "./errors.js";
+import { AIInvalidResponseError } from "../errors.js";
 import { attachSources } from "./sources.js";
 
 // Largest-remainder apportionment: floors each share, then hands the leftover
@@ -24,7 +24,11 @@ const PLANNER_WEIGHTS = {
   "system-design": { "system-design": 0.6, technical: 0.3, behavioral: 0.1 },
 };
 
-export const makePlannerNode = () => async (state) => {
+// Every node is a plain LangGraph node: (state, runtime) → partial state update (or a
+// Command). Dependencies come from `runtime.context` (see QuestionGenContext in state.js).
+
+// Data step: how many questions of each category.
+export const plannerNode = async (state) => {
   const weights = PLANNER_WEIGHTS[state.interviewType] || PLANNER_WEIGHTS.technical;
   return { plan: { categoryCounts: distributeCounts(state.count, weights) } };
 };
@@ -44,7 +48,8 @@ const sample = (items, n, random) => {
 // The model only chooses search filters; code runs the search. An agent tool loop
 // here ignored the offset, repeated generic problems and hit the step limit.
 // Grounding stays optional: any failure degrades to no research.
-export const makeResearcherNode = ({ chooseSearch, searchProblems, random = Math.random }) => async (state) => {
+export const researcherNode = async (state, runtime) => {
+  const { chooseSearch, searchProblems, random = Math.random } = runtime.context;
   const technicalCount = state.plan.categoryCounts.technical || 0;
   if (!technicalCount) return { research: [] };
   try {
@@ -75,8 +80,9 @@ export const makeResearcherNode = ({ chooseSearch, searchProblems, random = Math
 const formatResearch = (research) =>
   research.length ? research.map((p) => `- ${p.slug} — ${p.title} (${p.difficulty})`).join("\n") : "none";
 
-// `draft({ useFallbackModel, prompt })` → { questions } is the drafter model (see models.js).
-export const makeDrafterNode = ({ draft }) => async (state) => {
+// LLM step: draft the questions (structured output, see models.js).
+export const drafterNode = async (state, runtime) => {
+  const { draft } = runtime.context;
   const prompt = [
     `Generate exactly ${state.count} interview questions.`,
     `Role: ${state.role}`,
@@ -156,8 +162,8 @@ export const humanApprovalNode = async (state) => {
   });
 };
 
-// `saveQuestions(interviewId, questions)` persists through the interview repository.
-export const makeFinalizeNode = ({ saveQuestions }) => async (state) => {
-  await saveQuestions(state.interviewId, state.approval?.questions ?? state.draftQuestions);
+// Action step: persist the approved questions (through the interview repository).
+export const finalizeNode = async (state, runtime) => {
+  await runtime.context.saveQuestions(state.interviewId, state.approval?.questions ?? state.draftQuestions);
   return {};
 };

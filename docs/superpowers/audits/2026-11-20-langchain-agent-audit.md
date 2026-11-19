@@ -5,6 +5,8 @@ References: skills `langchain-fundamentals`, `langchain-dependencies`, `langchai
 
 **Status (2026-11-20): recommendations 1–4 applied on `refactor/ai-agent`** — `graph.js` split into models / leetcodeSearch / graph / checkpointer / runner; config + repository injected through `container.js`; `initChatModel(...).withStructuredOutput()` with `provider:model` strings; `AIConfigError` thrown on model init failure; MCP server pinned to 1.5.1 (1.4.0 no longer starts) and closed on shutdown. Verified live: one real generation (6 questions, 4 LeetCode-grounded), rejected without writing. Recommendation 5 (LangSmith) not applied — optional.
 
+**Follow-up (2026-11-20, `refactor/agent-structure`):** layout aligned with the LangGraph application-structure page (`agent.js` + `utils/{state,nodes,tools,models,prompts,sources}.js`); dependencies passed as LangGraph runtime context (`contextSchema` / `runtime.context`) instead of node factories — verified on 1.4.21 to survive interrupt, resume and the finalize retry, and to stay out of checkpoints; `README.md` in the agent folder maps each choice to its doc page. `langgraph.json` deliberately not added (Studio can't supply the runtime context).
+
 ## Verdict
 
 **The agent uses the current (v1) APIs correctly and the pipeline design is sound** — explicit LangGraph graph, human-in-the-loop with `interrupt()` + checkpointer, typed state, retry policy, structured output, MCP tools through the official adapter. Nothing is on a deprecated/legacy API.

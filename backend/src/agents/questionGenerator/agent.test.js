@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { MemorySaver } from "@langchain/langgraph";
-import { buildGraph } from "./graph.js";
+import { workflow } from "./agent.js";
 import { createQuestionGenerator } from "./runner.js";
 import { AIConfigError, AIInvalidResponseError, UnknownJobError } from "./errors.js";
 
@@ -18,8 +18,11 @@ const makeDeps = ({ draftQuestions = goodQuestions, update = vi.fn().mockResolve
   saveQuestions: update,
 });
 
-// The public API (start/resume) over a real compiled graph with fake collaborators.
-const generatorFor = (graph) => createQuestionGenerator({ graph });
+// The real workflow, compiled with an in-memory checkpointer; the fakes are its runtime context.
+const buildGraph = ({ checkpointer, ...context }) => ({ graph: workflow.compile({ checkpointer }), context });
+
+// The public API (start/resume) over that graph.
+const generatorFor = ({ graph, context }) => createQuestionGenerator({ graph, context });
 const startQuestionGeneration = (args, { graph }) => generatorFor(graph).start(args);
 const resumeQuestionGeneration = (args, { graph }) => generatorFor(graph).resume(args);
 
