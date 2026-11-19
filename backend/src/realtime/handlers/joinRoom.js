@@ -1,6 +1,11 @@
 import { getCurrentQuestion } from "../roomQuestions.js";
 
-export const createJoinRoomHandler = ({ roomState, roomQuestions, findCodeSnapshot }) => (socket) => async (roomId) => {
+export const createJoinRoomHandler = ({ roomState, roomQuestions, findCodeSnapshot, canAccessRoom }) => (socket) => async (roomId) => {
+  // Owners may enter their own interviews' rooms, a candidate only the invited one.
+  if (typeof roomId !== "string" || !(await canAccessRoom(socket.data.principal, roomId))) {
+    socket.emit("error-message", "Forbidden");
+    return;
+  }
   socket.join(roomId);
   socket.data.roomId = roomId;
   console.log(`User ${socket.id} joined room: ${roomId}`);

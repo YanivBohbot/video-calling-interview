@@ -10,11 +10,12 @@ const QUESTION = { index: 0, text: "Reverse a list", category: "technical", diff
 
 // Records every emit in order, whether direct (socket.emit), to peers (socket.to) or to the room (io.to).
 let events;
-const fakeSocket = (id = "s1") => {
+const OWNER = { kind: "interviewer", userId: "u-ada", clerkId: "clerk_ada" };
+const fakeSocket = (id = "s1", principal = OWNER) => {
   const rooms = new Set([id]);
   return {
     id,
-    data: {},
+    data: { principal },
     rooms,
     join: vi.fn((room) => rooms.add(room)),
     emit: vi.fn((name, payload) => events.push(["self", name, payload])),
@@ -35,6 +36,10 @@ beforeEach(() => {
     roomQuestions: new Map(),
     interviewStore: { update: vi.fn().mockResolvedValue({}) },
     findCodeSnapshot: vi.fn(),
+    // Rooms the principal may enter: owners their interviews, a candidate only theirs.
+    canAccessRoom: vi.fn(async (principal, roomId) =>
+      principal.kind === "candidate" ? principal.interviewId === roomId : true,
+    ),
   };
 });
 
@@ -154,5 +159,33 @@ describe("disconnect", () => {
     createDisconnectHandler(ctx)(socket)();
     expect(ctx.roomQuestions.has("r1")).toBe(true);
     expect(ctx.interviewStore.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("room access", () => {
+  const candidate = { kind: "candidate", interviewId: "iv-1" };
+
+  it("refuses a candidate joining another interview's room", async () => {
+    ctx.roomState.set("iv-2", { code: "secret()", language: "js", dirty: false });
+    const socket = fakeSocket("s9", candidate);
+    await createJoinRoomHandler(ctx)(socket)("iv-2");
+    expect(socket.rooms.has("iv-2")).toBe(false);
+    expect(socket.data.roomId).toBeUndefined();
+    expect(events).toEqual([["self", "error-message", "Forbidden"]]);
+  });
+
+  it("lets a candidate join their own room", async () => {
+    ctx.findCodeSnapshot.mockResolvedValue(null);
+    const socket = fakeSocket("s9", candidate);
+    await createJoinRoomHandler(ctx)(socket)("iv-1");
+    expect(socket.rooms.has("iv-1")).toBe(true);
+  });
+
+  it("ignores question-change from a candidate", () => {
+    const socket = fakeSocket("s9", candidate);
+    socket.rooms.add("iv-1");
+    createQuestionChangeHandler(ctx)(socket)({ roomId: "iv-1", question: QUESTION });
+    expect(events).toEqual([]);
+    expect(ctx.roomQuestions.has("iv-1")).toBe(false);
   });
 });

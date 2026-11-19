@@ -5,6 +5,8 @@ import { connectDB, prisma } from "./lib/db.js";
 import { createContainer } from "./container.js";
 import { createApp } from "./app.js";
 import { attachRealtime } from "./realtime/index.js";
+import { createSocketAuthenticator } from "./realtime/authenticateSocket.js";
+import { createRoomAccess } from "./realtime/roomAccess.js";
 import { getLeetCodeTools } from "./agents/leetcodeMcpClient.js";
 import { ensureCheckpointerTables } from "./agents/questionGenerator/graph.js";
 
@@ -24,6 +26,8 @@ const realtime = attachRealtime({
   clientUrl: config.clientUrl,
   interviewStore: prisma.interview,
   findCodeSnapshot: container.repositories.interview.findCodeSnapshot,
+  authenticator: createSocketAuthenticator(container.auth.resolver),
+  canAccessRoom: createRoomAccess({ interviewRepository: container.repositories.interview }),
 });
 
 let shuttingDown = false;

@@ -23,11 +23,15 @@ const EVENTS = {
 // Attaches the collaborative-editor channel to the HTTP server.
 //   interviewStore    — Prisma `interview` delegate (roomState persists through its `update`)
 //   findCodeSnapshot  — (interviewId) → { codeSnapshot, codeLanguage } | null
+//   authenticator     — Socket.io middleware setting socket.data.principal (see authenticateSocket.js)
+//   canAccessRoom     — (principal, roomId) → Promise<boolean>
 export const attachRealtime = ({
   httpServer,
   clientUrl,
   interviewStore,
   findCodeSnapshot,
+  authenticator,
+  canAccessRoom,
   flushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS,
 }) => {
   const io = new Server(httpServer, {
@@ -39,7 +43,10 @@ export const attachRealtime = ({
   // empty code instead of the persisted snapshot.
   const roomQuestions = new Map();
 
-  const ctx = { io, roomState, roomQuestions, interviewStore, findCodeSnapshot };
+  // Every connection must present a credential.
+  io.use(authenticator);
+
+  const ctx = { io, roomState, roomQuestions, interviewStore, findCodeSnapshot, canAccessRoom };
   const handlers = Object.entries(EVENTS).map(([event, factory]) => [event, factory(ctx)]);
 
   io.on("connection", (socket) => {
