@@ -1,20 +1,17 @@
-import express from "express";
 import legacyStreamRouter from "./routes/stream.routes.js";
-import aiController from "./controllers/aiController.js";
-import { protectRoute } from "./middlewares/protectRoute.js";
+import { createRateLimiter } from "./lib/rateLimiter.js";
+import {
+  startQuestionGeneration,
+  resumeQuestionGeneration,
+} from "./lib/agents/questionGenerator/graph.js";
 import { createSessionsModule } from "./modules/sessions/index.js";
 import { createUsersModule } from "./modules/users/index.js";
 import { createInterviewsModule } from "./modules/interviews/index.js";
+import { createQuestionsModule } from "./modules/questions/index.js";
 import { createClerkHeaderStrategy } from "./auth/clerkHeaderStrategy.js";
 
-// Temporary: the AI question routes keep their pre-refactor handlers until the
-// questions module replaces them.
-const createLegacyQuestionRouter = () => {
-  const router = express.Router({ mergeParams: true });
-  router.post("/generate", protectRoute, aiController.generateQuestions);
-  router.post("/approve", protectRoute, aiController.approveQuestions);
-  return router;
-};
+const AI_GENERATIONS_PER_HOUR = 10;
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
 // Composition root: the only place that knows which implementation backs each
 // dependency. Everything else receives its collaborators as parameters.
@@ -31,18 +28,26 @@ export const createContainer = ({ config, prisma }) => {
     findUserByClerkId: users.userRepository.findIdentityByClerkId,
   });
 
+  const questions = createQuestionsModule({
+    interviewRepository: interviews.interviewRepository,
+    generation: { start: startQuestionGeneration, resume: resumeQuestionGeneration },
+    rateLimiter: createRateLimiter({ max: AI_GENERATIONS_PER_HOUR, windowMs: ONE_HOUR_MS }),
+    config,
+    identityStrategy,
+  });
+
   return {
     config,
     prisma,
     auth: { identityStrategy },
-    modules: { sessions, users, interviews },
+    modules: { sessions, users, interviews, questions },
     routers: {
-      sessions: sessions.router,
-      users: users.router,
+      questions: questions.router,
       interviews: interviews.router,
+      users: users.router,
+      sessions: sessions.router,
     },
     legacyRouters: {
-      questions: createLegacyQuestionRouter(),
       stream: legacyStreamRouter,
     },
   };

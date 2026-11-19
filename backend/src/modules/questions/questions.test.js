@@ -1,0 +1,194 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import request from "supertest";
+import { createApp } from "../../app.js";
+import { createQuestionsModule } from "./index.js";
+import { createRateLimiter } from "../../lib/rateLimiter.js";
+import {
+  AIConfigError,
+  AIProviderError,
+  UnknownJobError,
+} from "../../lib/agents/questionGenerator/errors.js";
+
+// Ported from the pre-refactor aiController tests (same 12 cases), now driven over HTTP
+// through the real questions module with fake collaborators injected — no vi.mock.
+
+let interviewRepository;
+let generation;
+let config;
+let app;
+
+// Stand-in identity strategy: any x-clerk-id is a valid caller.
+const headerIdentity = {
+  resolveIdentity: async (req) => {
+    const clerkID = req.header("x-clerk-id");
+    return clerkID ? { id: `id-${clerkID}`, name: "U", email: "u@x", clerkID } : null;
+  },
+};
+
+const build = (overrides = {}) => {
+  const questions = createQuestionsModule({
+    interviewRepository,
+    generation,
+    rateLimiter: createRateLimiter({ max: 10, windowMs: 60 * 60 * 1000 }),
+    config,
+    identityStrategy: headerIdentity,
+    ...overrides,
+  });
+  app = createApp({ config: { clientUrl: "http://x" }, routers: { questions: questions.router } });
+};
+
+const generate = (id = "iv-1", clerk = "user-a") =>
+  request(app).post(`/api/interviews/${id}/questions/generate`).set("x-clerk-id", clerk);
+const approve = (body, id = "iv-1") =>
+  request(app).post(`/api/interviews/${id}/questions/approve`).set("x-clerk-id", "user-a").send(body);
+
+beforeEach(() => {
+  interviewRepository = { findById: vi.fn(), findByIdWithInterviewer: vi.fn() };
+  generation = { start: vi.fn(), resume: vi.fn() };
+  config = { openaiApiKey: "sk-test", aiQuestionCount: 6 };
+  build();
+});
+
+describe("POST /api/interviews/:id/questions/generate", () => {
+  it("returns 404 when interview not found", async () => {
+    interviewRepository.findById.mockResolvedValue(null);
+    const res = await generate();
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ message: "Interview not found" });
+  });
+
+  it("returns 500 when OPENAI_API_KEY is missing", async () => {
+    config = { aiQuestionCount: 6 };
+    build();
+    interviewRepository.findById.mockResolvedValue({ id: "iv-1", role: "x", interviewType: "technical" });
+    const res = await generate("iv-1", "user-nokey");
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: "AI not configured: OPENAI_API_KEY missing" });
+    expect(generation.start).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 after exhausting the rate limit for a key", async () => {
+    interviewRepository.findById.mockResolvedValue({ id: "iv-1", role: "x", interviewType: "technical" });
+    generation.start.mockResolvedValue({ jobId: "job-1", draftQuestions: [], plan: {} });
+    for (let i = 0; i < 10; i++) await generate();
+    const res = await generate();
+    expect(res.status).toBe(429);
+    expect(res.body.message).toBe("Too many AI generations, slow down");
+    expect(typeof res.body.retryAfter).toBe("number");
+  });
+
+  it("returns 502 when the generation throws AIProviderError, without the provider detail", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    interviewRepository.findById.mockResolvedValue({ id: "iv-2", role: "x", interviewType: "technical" });
+    generation.start.mockRejectedValue(new AIProviderError("boom: upstream 503 at api.openai.com"));
+    const res = await generate("iv-2", "user-b");
+    expect(res.status).toBe(502);
+    expect(res.body).toEqual({ message: "AI service unavailable" });
+  });
+
+  it("surfaces an AIConfigError as a 500 with its message", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    interviewRepository.findById.mockResolvedValue({ id: "iv-1", role: "x", interviewType: "technical" });
+    generation.start.mockRejectedValue(new AIConfigError("AI_MODEL is not a supported model"));
+    const res = await generate("iv-1", "user-cfg");
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: "AI_MODEL is not a supported model" });
+  });
+
+  it("returns 200 with jobId/draftQuestions/plan on success", async () => {
+    const draftQuestions = [{ text: "Q1", category: "technical", difficulty: "easy" }];
+    const plan = { categoryCounts: { technical: 1 } };
+    interviewRepository.findById.mockResolvedValue({ id: "iv-3", role: "Backend", interviewType: "technical" });
+    generation.start.mockResolvedValue({ jobId: "job-3", draftQuestions, plan });
+    const res = await generate("iv-3", "user-c");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ jobId: "job-3", status: "pending_approval", draftQuestions, plan });
+    expect(generation.start).toHaveBeenCalledWith({
+      interviewId: "iv-3",
+      role: "Backend",
+      interviewType: "technical",
+      count: 6,
+    });
+  });
+
+  it("refuses callers without an identity", async () => {
+    const res = await request(app).post("/api/interviews/iv-1/questions/generate");
+    expect(res.status).toBe(401);
+    expect(interviewRepository.findById).not.toHaveBeenCalled();
+  });
+
+  it("hides unexpected failures behind Failed to generate questions", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    interviewRepository.findById.mockRejectedValue(new Error("db down"));
+    const res = await generate("iv-1", "user-err");
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: "Failed to generate questions" });
+  });
+});
+
+describe("POST /api/interviews/:id/questions/approve", () => {
+  it("returns 400 when jobId or approved is missing/wrong type", async () => {
+    const res = await approve({ approved: true });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ message: "jobId (string) and approved (boolean) are required" });
+  });
+
+  it.each([
+    ["an empty-text row", [{ text: "", category: "technical", difficulty: "easy" }]],
+    ["a bogus category", [{ text: "Q", category: "nope", difficulty: "easy" }]],
+    ["a non-array", "not-an-array"],
+    ["null", null],
+  ])("returns 400 for %s and leaves the draft pending (never resumes)", async (_label, questions) => {
+    const res = await approve({ jobId: "j", approved: true, questions });
+    expect(res.status).toBe(400);
+    expect(generation.resume).not.toHaveBeenCalled();
+  });
+
+  it("does not validate questions on reject (they are ignored)", async () => {
+    generation.resume.mockResolvedValue({ approved: false });
+    const res = await approve({ jobId: "j", approved: false, questions: "junk" });
+    expect(res.status).toBe(200);
+    expect(generation.resume).toHaveBeenCalledWith(expect.objectContaining({ questions: undefined }));
+  });
+
+  it("scopes the resume to the interview in the URL, never one named in the body", async () => {
+    generation.resume.mockResolvedValue({ approved: false });
+    await approve({ jobId: "job-from-iv-2", approved: true, interviewId: "iv-2" }, "iv-1");
+    expect(generation.resume).toHaveBeenCalledWith(
+      expect.objectContaining({ interviewId: "iv-1", jobId: "job-from-iv-2" }),
+    );
+  });
+
+  it("returns 404 when the job has no pending approval (unknown or already resolved)", async () => {
+    generation.resume.mockRejectedValue(new UnknownJobError("no pending approval"));
+    const res = await approve({ jobId: "iv-1:stale", approved: true });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ message: "No pending approval for this job" });
+    expect(interviewRepository.findByIdWithInterviewer).not.toHaveBeenCalled();
+  });
+
+  it("returns { status: 'rejected' } and does not look up the interview on reject", async () => {
+    generation.resume.mockResolvedValue({ approved: false });
+    const res = await approve({ jobId: "iv-1:abc", approved: false });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "rejected" });
+    expect(interviewRepository.findByIdWithInterviewer).not.toHaveBeenCalled();
+  });
+
+  it("returns the updated interview doc on approve", async () => {
+    generation.resume.mockResolvedValue({ approved: true });
+    interviewRepository.findByIdWithInterviewer.mockResolvedValue({
+      id: "iv-1",
+      interviewerId: "u1",
+      questions: [],
+      interviewer: { id: "u1", name: "A", email: "a@x", clerkId: "c1" },
+    });
+    const res = await approve({ jobId: "iv-1:abc", approved: true, questions: [] });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      _id: "iv-1",
+      questions: [],
+      interviewerId: { _id: "u1", name: "A", email: "a@x", clerkID: "c1" },
+    });
+  });
+});
