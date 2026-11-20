@@ -48,9 +48,9 @@ const QuestionsModal: React.FC<{
             jobId={jobId}
             setJobId={setJobId}
             savedQuestions={saved}
-            onSaved={(next) => {
+            onSaved={(next, how) => {
               onSaved(next);
-              onClose();
+              if (how === 'approved') onClose();
             }}
           />
         </div>

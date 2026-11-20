@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Save, Sparkles, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { Loader2, Save, Sparkles, ExternalLink, CheckCircle2, Check, Plus, Trash2 } from 'lucide-react';
 import type { Question } from '../lib/questions';
 import { useApi } from '../lib/api';
 
@@ -15,7 +15,8 @@ const QuestionsPanel: React.FC<{
   jobId: string | null;
   setJobId: (jobId: string | null) => void;
   savedQuestions: Question[];
-  onSaved: (saved: Question[]) => void;
+  // `how` lets a host react differently to an approval (e.g. close a modal) and a deletion.
+  onSaved: (saved: Question[], how?: 'approved' | 'edited' | 'deleted') => void;
 }> = ({ interviewId, questions, setQuestions, jobId, setJobId, savedQuestions, onSaved }) => {
   const { apiFetch } = useApi();
   const [loading, setLoading] = React.useState(false);
@@ -67,8 +68,22 @@ const QuestionsPanel: React.FC<{
     setQuestions((qs) => qs.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
   };
 
-  const deleteRow = (i: number) => {
+  const deleteRow = async (i: number) => {
     setSavedCount(null);
+    // A saved question is removed for good right away, so it disappears from the room's list too.
+    if (!isDraft) {
+      const remaining = savedQuestions.filter((_, idx) => idx !== i);
+      const r = await apiFetch(`/api/interviews/${interviewId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questions: remaining }),
+      }).catch(() => null);
+      if (!r?.ok) {
+        setError('Could not delete the question — try again.');
+        return;
+      }
+      onSaved(remaining, 'deleted');
+    }
     setQuestions((qs) => qs.filter((_, idx) => idx !== i));
     // Keep the selection on the same questions once the later ones shift up.
     setSelected((prev) => new Set([...prev].filter((k) => k !== i).map((k) => (k > i ? k - 1 : k))));
@@ -108,7 +123,7 @@ const QuestionsPanel: React.FC<{
       setSelected(new Set());
       if (approved) {
         setQuestions(toSave);
-        onSaved(toSave);
+        onSaved(toSave, isDraft ? 'approved' : 'edited');
         setSavedCount(toSave.length);
       } else {
         setQuestions(savedQuestions);
@@ -174,17 +189,32 @@ const QuestionsPanel: React.FC<{
               isDraft && selected.has(i) ? 'border-emerald-500/60' : 'border-white/5'
             }`}
           >
-            {isDraft && (
-              <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={selected.has(i)}
-                  onChange={() => toggle(i)}
-                  className="accent-emerald-500 w-4 h-4"
-                />
-                Keep this question
-              </label>
-            )}
+            <div className="flex items-center gap-2">
+              {isDraft && (
+                <button
+                  type="button"
+                  onClick={() => toggle(i)}
+                  aria-pressed={selected.has(i)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                    selected.has(i)
+                      ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                      : 'bg-white/5 text-slate-300 ring-1 ring-inset ring-white/10 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {selected.has(i) ? <Check size={13} /> : <Plus size={13} />}
+                  {selected.has(i) ? 'Kept' : 'Keep'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => deleteRow(i)}
+                aria-label="Delete question"
+                title="Delete question"
+                className="ml-auto rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
             {q.source && (
               <a
                 href={q.source.url}
@@ -221,9 +251,6 @@ const QuestionsPanel: React.FC<{
                 <option value="medium">medium</option>
                 <option value="hard">hard</option>
               </select>
-              <button onClick={() => deleteRow(i)} className="ml-auto text-slate-500 hover:text-red-400">
-                Delete
-              </button>
             </div>
           </div>
         ))}
