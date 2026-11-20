@@ -23,6 +23,19 @@ const QuestionsPanel: React.FC<{
   const [error, setError] = React.useState<string | null>(null);
   // Without this, a successful save only flipped the button label and looked like nothing happened.
   const [savedCount, setSavedCount] = React.useState<number | null>(null);
+  // While an AI draft is pending, the interviewer picks which proposals to keep (by index).
+  // Kept proposals are added to the questions already saved for this interview.
+  const [selected, setSelected] = React.useState<Set<number>>(new Set());
+  const isDraft = jobId !== null;
+  const toggle = (i: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  const allSelected = questions.length > 0 && selected.size === questions.length;
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(questions.map((_, i) => i)));
 
   const generate = async () => {
     setLoading(true);
@@ -41,6 +54,7 @@ const QuestionsPanel: React.FC<{
       }
       setJobId(body.jobId);
       setQuestions(body.draftQuestions);
+      setSelected(new Set());
     } catch (e: any) {
       setError(e?.message || 'Network error');
     } finally {
@@ -56,11 +70,15 @@ const QuestionsPanel: React.FC<{
   const deleteRow = (i: number) => {
     setSavedCount(null);
     setQuestions((qs) => qs.filter((_, idx) => idx !== i));
+    // Keep the selection on the same questions once the later ones shift up.
+    setSelected((prev) => new Set([...prev].filter((k) => k !== i).map((k) => (k > i ? k - 1 : k))));
   };
 
   // A pending AI draft is approved/rejected through the paused graph; with no draft
   // pending, Save is a plain edit of the already-saved list.
   const resolve = async (approved: boolean) => {
+    // Approving a draft saves the already-saved questions plus the picked proposals.
+    const toSave = isDraft ? [...savedQuestions, ...questions.filter((_, i) => selected.has(i))] : questions;
     setSaving(true);
     setError(null);
     try {
@@ -68,7 +86,7 @@ const QuestionsPanel: React.FC<{
         ? await apiFetch(`/api/interviews/${interviewId}/questions/approve`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jobId, approved, questions: approved ? questions : undefined }),
+            body: JSON.stringify({ jobId, approved, questions: approved ? toSave : undefined }),
           })
         : await apiFetch(`/api/interviews/${interviewId}`, {
             method: 'PATCH',
@@ -87,9 +105,11 @@ const QuestionsPanel: React.FC<{
         return;
       }
       setJobId(null);
+      setSelected(new Set());
       if (approved) {
-        onSaved(questions);
-        setSavedCount(questions.length);
+        setQuestions(toSave);
+        onSaved(toSave);
+        setSavedCount(toSave.length);
       } else {
         setQuestions(savedQuestions);
       }
@@ -133,13 +153,38 @@ const QuestionsPanel: React.FC<{
         </div>
       )}
 
+      {isDraft && questions.length > 0 && (
+        <div className="flex items-center justify-between mb-3 text-sm">
+          <p className="text-slate-300">Pick the questions to keep{savedQuestions.length ? ` (added to the ${savedQuestions.length} already saved)` : ''}.</p>
+          <button onClick={toggleAll} className="text-brand hover:text-white text-xs font-semibold">
+            {allSelected ? 'Clear selection' : 'Select all'}
+          </button>
+        </div>
+      )}
+
       {questions.length === 0 && !loading && (
         <p className="text-slate-400 text-sm">No questions yet — click "Generate questions".</p>
       )}
 
       <div className="space-y-3">
         {questions.map((q, i) => (
-          <div key={i} className="bg-slate-800/60 border border-white/5 rounded-xl p-3 flex flex-col gap-2">
+          <div
+            key={i}
+            className={`bg-slate-800/60 border rounded-xl p-3 flex flex-col gap-2 ${
+              isDraft && selected.has(i) ? 'border-emerald-500/60' : 'border-white/5'
+            }`}
+          >
+            {isDraft && (
+              <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={selected.has(i)}
+                  onChange={() => toggle(i)}
+                  className="accent-emerald-500 w-4 h-4"
+                />
+                Keep this question
+              </label>
+            )}
             {q.source && (
               <a
                 href={q.source.url}
@@ -197,11 +242,11 @@ const QuestionsPanel: React.FC<{
           )}
           <button
             onClick={() => resolve(true)}
-            disabled={saving}
+            disabled={saving || (isDraft && selected.size === 0)}
             className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {jobId ? 'Approve & save' : 'Save questions'}
+            {isDraft ? `Save ${selected.size} selected` : 'Save questions'}
           </button>
         </div>
       )}
