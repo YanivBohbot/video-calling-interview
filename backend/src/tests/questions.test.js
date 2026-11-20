@@ -7,7 +7,7 @@ import {
   AIConfigError,
   AIProviderError,
   UnknownJobError,
-} from "../agents/questionGenerator/errors.js";
+} from "../agents/questionGenerator/index.js";
 
 // Ported from the pre-refactor aiController tests (same 12 cases), now driven over HTTP
 // through the real container, with fakes injected for the AI pipeline and identity — no vi.mock.

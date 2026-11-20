@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { MemorySaver } from "@langchain/langgraph";
-import { workflow } from "./agent.js";
-import { createQuestionGenerator } from "./runner.js";
-import { AIConfigError, AIInvalidResponseError, UnknownJobError } from "./errors.js";
+import { workflow } from "./workflow.js";
+import { createQuestionGenerator } from "../execution/generator.js";
+import { AIConfigError, AIInvalidResponseError, UnknownJobError } from "../errors.js";
 
 const goodQuestions = [
   { text: "Explain closures", category: "technical", difficulty: "medium" },

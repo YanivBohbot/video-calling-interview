@@ -1,27 +1,42 @@
 # AI question generator
 
 Drafts interview questions for one interview, grounded on real LeetCode problems, and
-saves them only after the interviewer approves them. Built with LangGraph (JS) and laid
-out like the official [application structure](https://docs.langchain.com/oss/javascript/langgraph/application-structure).
+saves them only after the interviewer picks and approves them. Built with LangGraph (JS).
+
+## Layout — one folder per responsibility
 
 ```
 questionGenerator/
-├── agent.js          graph construction — the `workflow` (doc: agent.ts)
-├── utils/
-│   ├── state.js      state schema + runtime-context schema (doc: utils/state.ts)
-│   ├── nodes.js      the node functions (doc: utils/nodes.ts)
-│   ├── tools.js      LeetCode MCP tools + the search the researcher runs (doc: utils/tools.ts)
-│   ├── models.js     the two structured-output model calls
-│   ├── prompts.js    system prompts
-│   └── sources.js    LeetCode result parsing, source attribution
-├── checkpointer.js   PostgresSaver (persistence)
-├── runner.js         start / resume a generation (the API the service calls)
-└── errors.js         errors the API maps to HTTP statuses
+├── index.js                 the only entry point (container.js imports from here)
+├── errors.js                errors the API maps to HTTP statuses
+│
+├── graph/                   WHAT the pipeline is
+│   ├── workflow.js          nodes + edges, exported uncompiled
+│   ├── state.js             state schema + runtime-context schema
+│   └── nodes/               one node per file, plain (state, runtime) functions
+│       ├── planner.js       ├── validator.js      ├── humanApproval.js
+│       ├── researcher.js    ├── fallback.js       └── finalize.js
+│       └── drafter.js       (index.js re-exports them)
+│
+├── llm/                     talking to the models
+│   ├── models.js            initChatModel("provider:model").withStructuredOutput(zod)
+│   └── prompts.js           system prompts
+│
+├── leetcode/                the external tool
+│   ├── mcpClient.js         LeetCode MCP server via @langchain/mcp-adapters (pinned, closable)
+│   ├── search.js            the search_problems call the researcher runs
+│   └── sources.js           parse results, attach verified sources to questions
+│
+└── execution/               running it
+    ├── generator.js         start / resume a generation (one thread per job)
+    └── checkpointer.js      PostgresSaver, own "langgraph" schema
 ```
 
-Assembled in `src/container.js`, which compiles `workflow` with the Postgres checkpointer
-and builds the runtime context from validated config. Nothing here imports Prisma or reads
-`process.env` (enforced by `src/tests/aiWiring.test.js`).
+Dependencies point one way: `execution → graph → (llm, leetcode)` only through the
+runtime context — nodes never import `llm/` or `leetcode/mcpClient.js`; `container.js`
+builds those and passes them in. Nothing here imports Prisma or reads `process.env`, and
+nothing outside imports a file other than `index.js` (both enforced by
+`src/tests/aiWiring.test.js`).
 
 ## The workflow
 

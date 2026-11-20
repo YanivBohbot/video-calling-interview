@@ -102,15 +102,13 @@ Code execution (the "Run" button) calls the public Piston API (`emkc.org`) direc
 `backend/src/agents/` drafts interview questions with a LangGraph pipeline (planner → researcher → drafter → validator → human approval → finalize), grounded on LeetCode problems via the LeetCode MCP server; approved questions land in `Interview.questions` (Json).
 
 ```
-agents/questionGenerator/          layout of docs.langchain.com/oss/javascript/langgraph/application-structure (see its README.md)
-  agent.js          `workflow` — the StateGraph (State + QuestionGenContext), exported uncompiled
-  utils/state.js    state schema + runtime-context schema (chooseSearch, searchProblems, draft, saveQuestions)
-  utils/nodes.js    plain (state, runtime) nodes; dependencies from runtime.context
-  utils/tools.js    LeetCode MCP client (pinned LEETCODE_MCP_PACKAGE, close()) + createSearchProblems
-  utils/models.js   initChatModel("provider:model").withStructuredOutput(zod) — chooseSearch, draft
-  utils/prompts.js · utils/sources.js · errors.js
-  checkpointer.js   PostgresSaver in its own "langgraph" schema (setup() at boot)
-  runner.js         createQuestionGenerator({ graph, context }) → { start, resume } — passes context on every invoke
+agents/questionGenerator/       one folder per responsibility (see its README.md)
+  index.js          the only entry point — the rest of the backend imports from here (enforced by tests/aiWiring.test.js)
+  graph/            workflow.js (StateGraph, exported uncompiled) · state.js (state + runtime-context schemas) · nodes/<one per file>
+  llm/              models.js — initChatModel("provider:model").withStructuredOutput(zod) · prompts.js
+  leetcode/         mcpClient.js (pinned MCP server, close()) · search.js · sources.js
+  execution/        generator.js — createQuestionGenerator({ graph, context }) → { start, resume } · checkpointer.js (PostgresSaver)
+  errors.js
 ```
 
 `container.js` compiles `workflow` with the checkpointer and builds its runtime context, lazily (`container.ai.setup / warmUp / close` are called by `server.js`); agents never import Prisma or read `process.env`. Models are full LangChain `provider:model` strings: `AI_MODEL` (default `openai:gpt-4o-mini`) and `AI_MODEL_FALLBACK` (default `openai:gpt-4o`); a bare name means OpenAI. Audit and rationale: `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.

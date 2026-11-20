@@ -1,10 +1,13 @@
 import { StreamClient } from "@stream-io/node-sdk";
 import { createRateLimiter } from "./lib/rateLimiter.js";
-import { workflow } from "./agents/questionGenerator/agent.js";
-import { createLeetCodeTools, createSearchProblems } from "./agents/questionGenerator/utils/tools.js";
-import { createQuestionModels } from "./agents/questionGenerator/utils/models.js";
-import { createCheckpointer } from "./agents/questionGenerator/checkpointer.js";
-import { createQuestionGenerator } from "./agents/questionGenerator/runner.js";
+import {
+  workflow,
+  createLeetCodeTools,
+  createSearchProblems,
+  createQuestionModels,
+  createCheckpointer,
+  createQuestionGenerator,
+} from "./agents/questionGenerator/index.js";
 import { createClerkVerifier } from "./auth/clerkVerifier.js";
 import { createDemoTokens } from "./auth/demoTokens.js";
 import { createIdentityResolver } from "./auth/identityResolver.js";

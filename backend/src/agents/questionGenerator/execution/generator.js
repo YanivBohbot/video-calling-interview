@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Command } from "@langchain/langgraph";
-import { AIConfigError, AIProviderError, AIInvalidResponseError, UnknownJobError } from "./errors.js";
+import { AIConfigError, AIProviderError, AIInvalidResponseError, UnknownJobError } from "../errors.js";
 
 // Errors the API maps itself pass through; anything else from the pipeline is a provider failure.
 const passThrough = (err) => err instanceof AIInvalidResponseError || err instanceof AIConfigError;
@@ -10,7 +10,7 @@ const passThrough = (err) => err instanceof AIInvalidResponseError || err instan
 // thread, addressed as `${interviewId}:${jobId}` — a jobId minted for one interview
 // resolves to nothing for any other.
 //
-// `graph` is the compiled workflow (agent.js); `context` its runtime dependencies
+// `graph` is the compiled workflow (graph/workflow.js); `context` its runtime dependencies
 // (QuestionGenContext), passed on every invoke — start, resume and the finalize retry.
 export const createQuestionGenerator = ({ graph, context }) => {
   const threadConfig = (interviewId, jobId) => ({

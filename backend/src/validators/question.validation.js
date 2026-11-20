@@ -1,4 +1,4 @@
-import { leetcodeUrl } from "../agents/questionGenerator/utils/sources.js";
+import { leetcodeUrl } from "../agents/questionGenerator/index.js";
 
 const ALLOWED_QUESTION_CATEGORY = new Set(["technical", "behavioral", "system-design"]);
 const ALLOWED_QUESTION_DIFFICULTY = new Set(["easy", "medium", "hard"]);

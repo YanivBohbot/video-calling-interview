@@ -27,4 +27,19 @@ describe("AI wiring", () => {
       expect(code, f).not.toMatch(/lib\/db\.js|process\.env/);
     }
   });
+
+  it("the rest of the backend reaches the agent only through its index.js", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = path.resolve(import.meta.dirname, "..");
+    const files = fs
+      .readdirSync(src, { recursive: true })
+      .filter((f) => f.endsWith(".js") && !f.startsWith("agents"));
+    for (const f of files) {
+      const code = fs.readFileSync(path.join(src, f), "utf8");
+      for (const [, target] of code.matchAll(new RegExp('from "([^"]*agents/questionGenerator[^"]*)"', "g"))) {
+        expect(target, f).toMatch(new RegExp("agents/questionGenerator/index[.]js$"));
+      }
+    }
+  });
 });

@@ -1,5 +1,5 @@
 import { StateGraph, START, END } from "@langchain/langgraph";
-import { QuestionGenState, QuestionGenContext } from "./utils/state.js";
+import { QuestionGenState, QuestionGenContext } from "./state.js";
 import {
   plannerNode,
   researcherNode,
@@ -8,9 +8,9 @@ import {
   fallbackNode,
   humanApprovalNode,
   finalizeNode,
-} from "./utils/nodes.js";
+} from "./nodes/index.js";
 
-// Graph construction (the doc's `agent.ts`). The workflow:
+// The workflow: which nodes exist and how they connect. Nothing else lives here.
 //
 //   START → planner → researcher → drafter → validator ─┬→ humanApproval ─┬→ finalize → END
 //                                    ↑         │         │   (interrupt)    └→ END (rejected)

@@ -1,6 +1,6 @@
 import { initChatModel } from "langchain";
 import { buildDrafterPrompt, buildResearcherPrompt } from "./prompts.js";
-import { DraftResponseSchema, SearchQuerySchema } from "./state.js";
+import { DraftResponseSchema, SearchQuerySchema } from "../graph/state.js";
 import { AIConfigError } from "../errors.js";
 
 // The pipeline's two LLM calls. Neither uses tools, so each is a single typed call:
