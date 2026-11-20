@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { io, Socket } from 'socket.io-client';
-import { Code, Play, Copy, ExternalLink, ListChecks } from 'lucide-react';
+import { Code, Play, Copy, ExternalLink, ListChecks, Sparkles } from 'lucide-react';
 import type { Question, AskedQuestion } from '../lib/questions';
 import { API_URL } from '../lib/config';
 
@@ -16,6 +16,8 @@ interface CodeEditorProps {
   askableQuestions?: Question[];
   // Sends a fresh credential on every (re)connection (see useApi().socketAuth).
   socketAuth: SocketAuth;
+  // Interviewer only: opens the AI question generator (InterviewRoom owns it).
+  onManageQuestions?: () => void;
 }
 
 const LeetCodeBadge: React.FC<{ source: NonNullable<Question['source']> }> = ({ source }) => (
@@ -30,7 +32,7 @@ const LeetCodeBadge: React.FC<{ source: NonNullable<Question['source']> }> = ({ 
   </a>
 );
 
-const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth }) => {
+const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth, onManageQuestions }) => {
   const [code, setCode] = useState<string>(
     initialCode ?? '// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();',
   );
@@ -178,10 +180,28 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
           <div className="h-9 flex items-center gap-2 px-3 border-b border-white/5 text-[11px] font-bold uppercase tracking-widest text-slate-400">
             <ListChecks size={13} className="text-brand" />
             Questions
+            {onManageQuestions && askableQuestions!.length > 0 && (
+              <button
+                onClick={onManageQuestions}
+                className="ml-auto flex items-center gap-1 normal-case tracking-normal font-semibold text-[11px] text-brand hover:text-white"
+              >
+                <Sparkles size={11} /> Edit / regenerate
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {askableQuestions!.length === 0 && (
-              <p className="text-xs text-slate-500 p-2">No questions for this interview — they're generated when you schedule it.</p>
+              <div className="p-2 space-y-2">
+                <p className="text-xs text-slate-500">No questions for this interview yet.</p>
+                {onManageQuestions && (
+                  <button
+                    onClick={onManageQuestions}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-brand hover:bg-brand-hover px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    <Sparkles size={13} /> Generate with AI
+                  </button>
+                )}
+              </div>
             )}
             {askableQuestions!.map((q, i) => (
               <div

@@ -10,7 +10,7 @@ import {
 } from '@stream-io/video-react-sdk';
 import { useUser } from '@clerk/react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, Code, PenTool, FileText, Loader2, Save, UserPlus, Check, Copy } from 'lucide-react';
+import { Video, Code, PenTool, FileText, Loader2, Save, UserPlus, Check, Copy, X } from 'lucide-react';
 import { useApi } from '../lib/api';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 
@@ -19,6 +19,45 @@ const apiKey = import.meta.env.VITE_STREAM_API_KEY;
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import Whiteboard from '../components/Whiteboard';
 import type { Question } from '../lib/questions';
+import QuestionsPanel from '../components/QuestionsPanel';
+
+// The AI question generator, opened from the room's question list (interviewer only).
+// Approved/saved questions replace the room's list right away.
+const QuestionsModal: React.FC<{
+  interviewId: string;
+  saved: Question[];
+  onSaved: (questions: Question[]) => void;
+  onClose: () => void;
+}> = ({ interviewId, saved, onSaved, onClose }) => {
+  const [questions, setQuestions] = React.useState<Question[]>(saved);
+  const [jobId, setJobId] = React.useState<string | null>(null);
+  return (
+    <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+      <div className="bg-slate-900 rounded-2xl shadow-2xl border border-white/10 w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+          <p className="text-sm text-slate-400">Approved questions appear in the room's question list, ready to ask.</p>
+          <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="overflow-y-auto">
+          <QuestionsPanel
+            interviewId={interviewId}
+            questions={questions}
+            setQuestions={setQuestions}
+            jobId={jobId}
+            setJobId={setJobId}
+            savedQuestions={saved}
+            onSaved={(next) => {
+              onSaved(next);
+              onClose();
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 
 const ReportModal: React.FC<{
@@ -104,6 +143,7 @@ export const InterviewRoom: React.FC = () => {
   const [call, setCall] = React.useState<any>(null);
   const [activeTab, setActiveTab] = React.useState<'code' | 'design'>('code');
   const [showReport, setShowReport] = React.useState(false);
+  const [showQuestions, setShowQuestions] = React.useState(false);
   const [interviewData, setInterviewData] = React.useState<{
     codeSnapshot?: string | null;
     codeLanguage?: string | null;
@@ -223,6 +263,14 @@ export const InterviewRoom: React.FC = () => {
       <StreamCall call={call}>
         <StreamTheme>
           <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+            {showQuestions && interviewData && (
+              <QuestionsModal
+                interviewId={id!}
+                saved={interviewData.questions ?? []}
+                onSaved={(questions) => setInterviewData((d) => (d ? { ...d, questions } : d))}
+                onClose={() => setShowQuestions(false)}
+              />
+            )}
             {showReport && (
               <ReportModal interviewId={id!} onDone={() => navigate('/interviews')} />
             )}
@@ -307,6 +355,7 @@ export const InterviewRoom: React.FC = () => {
                       initialLanguage={interviewData?.codeLanguage ?? undefined}
                       askableQuestions={isInterviewer ? interviewData?.questions ?? [] : undefined}
                       socketAuth={socketAuth}
+                      onManageQuestions={isInterviewer ? () => setShowQuestions(true) : undefined}
                     />
                   ) : (
                     <Whiteboard />
