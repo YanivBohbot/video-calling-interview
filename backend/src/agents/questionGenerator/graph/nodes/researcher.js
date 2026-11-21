@@ -1,5 +1,5 @@
 // LLM + tool step: find real LeetCode problems to ground the technical questions.
-// Dependencies (runtime.context): chooseSearch (llm/models.js), searchProblems (leetcode/search.js).
+// Dependencies (runtime.context): chooseSearch (llm/models.js), searchProblems (tools/leetcode/search.js).
 
 const dedupeBySlug = (problems) => [...new Map(problems.map((p) => [p.slug, p])).values()];
 

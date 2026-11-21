@@ -22,18 +22,22 @@ questionGenerator/
 │   ├── models.js            initChatModel("provider:model").withStructuredOutput(zod)
 │   └── prompts.js           system prompts
 │
-├── leetcode/                the external tool
-│   ├── mcpClient.js         LeetCode MCP server via @langchain/mcp-adapters (pinned, closable)
-│   ├── search.js            the search_problems call the researcher runs
-│   └── sources.js           parse results, attach verified sources to questions
+├── mcp/                     MCP server connections — one folder per server
+│   └── leetcode/
+│       └── client.js        LeetCode MCP server via @langchain/mcp-adapters (pinned, closable)
+│
+├── tools/                   the tools the graph uses — one folder per source
+│   └── leetcode/
+│       ├── search.js        the search_problems call the researcher runs
+│       └── sources.js       parse results, attach verified sources to questions
 │
 └── execution/               running it
     ├── generator.js         start / resume a generation (one thread per job)
     └── checkpointer.js      PostgresSaver, own "langgraph" schema
 ```
 
-Dependencies point one way: `execution → graph → (llm, leetcode)` only through the
-runtime context — nodes never import `llm/` or `leetcode/mcpClient.js`; `container.js`
+Dependencies point one way: `execution → graph → (llm, tools → mcp)` only through the
+runtime context — nodes never import `llm/` or `mcp/`; `container.js`
 builds those and passes them in. Nothing here imports Prisma or reads `process.env`, and
 nothing outside imports a file other than `index.js` (both enforced by
 `src/tests/aiWiring.test.js`).

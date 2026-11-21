@@ -106,7 +106,8 @@ agents/questionGenerator/       one folder per responsibility (see its README.md
   index.js          the only entry point — the rest of the backend imports from here (enforced by tests/aiWiring.test.js)
   graph/            workflow.js (StateGraph, exported uncompiled) · state.js (state + runtime-context schemas) · nodes/<one per file>
   llm/              models.js — initChatModel("provider:model").withStructuredOutput(zod) · prompts.js
-  leetcode/         mcpClient.js (pinned MCP server, close()) · search.js · sources.js
+  mcp/leetcode/     client.js — pinned LeetCode MCP server, close()
+  tools/leetcode/   search.js · sources.js
   execution/        generator.js — createQuestionGenerator({ graph, context }) → { start, resume } · checkpointer.js (PostgresSaver)
   errors.js
 ```

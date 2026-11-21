@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createLeetCodeTools, LEETCODE_MCP_PACKAGE } from "./mcpClient.js";
+import { createLeetCodeTools, LEETCODE_MCP_PACKAGE } from "./client.js";
 
 const healthyClient = (tools) => ({ getTools: vi.fn().mockResolvedValue(tools), close: vi.fn().mockResolvedValue() });
 const failingClient = (message) => ({ getTools: vi.fn().mockRejectedValue(new Error(message)), close: vi.fn().mockResolvedValue() });

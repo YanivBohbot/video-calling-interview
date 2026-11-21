@@ -61,7 +61,7 @@ export const SearchQuerySchema = z.object({
 const fn = () => z.custom((v) => typeof v === "function", { message: "must be a function" });
 export const QuestionGenContext = z.object({
   chooseSearch: fn(), // ({ role, interviewType }) → LeetCode search filters  (models.js)
-  searchProblems: fn(), // (filters) → [{ slug, title, difficulty }]          (tools.js)
+  searchProblems: fn(), // (filters) → [{ slug, title, difficulty }]          (tools/leetcode/search.js)
   draft: fn(), // ({ useFallbackModel, prompt }) → { questions }                 (models.js)
   saveQuestions: fn(), // (interviewId, questions) → void          (interview repository)
   random: fn().optional(), // () → [0, 1); defaults to Math.random (tests pin it)

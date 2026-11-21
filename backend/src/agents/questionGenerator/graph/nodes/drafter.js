@@ -1,4 +1,4 @@
-import { attachSources } from "../../leetcode/sources.js";
+import { attachSources } from "../../tools/leetcode/sources.js";
 
 // LLM step: draft the questions (structured output). Dependency (runtime.context): draft (llm/models.js).
 
