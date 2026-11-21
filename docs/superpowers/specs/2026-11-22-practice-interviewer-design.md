@@ -1,6 +1,9 @@
 # Entraînement avec un intervieweur IA — conception
 
-Statut : brouillon à valider · 2026-11-22
+Statut : validé · 2026-11-22
+
+Décision : le bilan est **réservé au candidat**. L'intervieweur voit seulement si le lien a
+été utilisé (nombre de séances, dates), jamais le contenu des séances ni le bilan.
 
 ## Intention
 
