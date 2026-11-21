@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
-import { buildTestApp, authAs, PRINCIPALS } from "./testApp.js";
-import { hashInviteSecret } from "../auth/inviteSecrets.js";
+import { buildTestApp, authAs, PRINCIPALS } from "../helpers/testApp.js";
+import { hashInviteSecret } from "../../auth/inviteSecrets.js";
 
 // The spec's access table, row by row, over a tiny in-memory interviews table.
 const { ada, bob, demo, candidateOf } = PRINCIPALS;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AIConfigError, AIProviderError, AIInvalidResponseError } from "./errors.js";
+import { AIConfigError, AIProviderError, AIInvalidResponseError } from "../../../agents/questionGenerator/errors.js";
 
 describe("question generator error types", () => {
   it("are distinct Error subclasses", () => {

@@ -1,5 +1,5 @@
-import { createContainer } from "../container.js";
-import { createApp } from "../app.js";
+import { createContainer } from "../../container.js";
+import { createApp } from "../../app.js";
 
 export const TEST_CONFIG = Object.freeze({
   clientUrl: "http://localhost:5174",

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createSearchProblems } from "./search.js";
+import { createSearchProblems } from "../../../../../agents/questionGenerator/tools/leetcode/search.js";
 
 const RAW = JSON.stringify({ problems: { questions: [{ titleSlug: "two-sum", title: "Two Sum", difficulty: "Easy" }] } });
 

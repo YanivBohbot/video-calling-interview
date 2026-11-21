@@ -57,7 +57,8 @@ backend/src/
   repositories/    <x>.repository.js   — the only Prisma callers, own select/include (createXRepository)
   validators/      <x>.schemas.js (zod request schemas, client-facing messages) + question.validation.js
                    features: interview, user, session, question (AI), stream
-  tests/           cross-layer HTTP tests: buildTestApp() = real container over a stub prisma + fakes
+  tests/           http/ (cross-layer HTTP tests: buildTestApp() = real container over a stub prisma + fakes)
+                   agents/questionGenerator/ (agent tests, same tree as the agent) · architecture/ (import-rule guards) · helpers/testApp.js
   realtime/        Socket.io: attachRealtime, one handler per event, roomState, roomQuestions, flushScheduler
   agents/          LangGraph question-generator pipeline + LeetCode MCP client
   lib/             db.js (prisma singleton), rateLimiter.js, seed.js
@@ -85,7 +86,7 @@ Every `/api` route (except `GET /health` and `POST /api/auth/demo`) and every So
 - The Stream video `user_id` is derived from the principal, never from the request.
 - Frontend: `src/lib/credentials.tsx` (Clerk via `@clerk/react` Core 3 — `<Show when="signed-in">`, not `SignedIn` / demo mode, demo token in `sessionStorage`) and `src/lib/api.ts` (`useApi()` → `apiFetch`, `socketAuth`; `useApi({ invite })` on the candidate page). Base URL from `VITE_API_URL` (`src/lib/config.ts`).
 - Backend env (names only): `CLERK_SECRET_KEY` (required), `DEMO_TOKEN_SECRET` (required, ≥ 32 chars), `CLERK_PUBLISHABLE_KEY` (optional, unused server-side).
-- Tests act as a principal through `buildTestApp({ principal })` / `authAs(principal)` (`backend/src/tests/testApp.js`); the real resolver is covered by `auth/identity.test.js` and `tests/auth.test.js`.
+- Tests act as a principal through `buildTestApp({ principal })` / `authAs(principal)` (`backend/src/tests/helpers/testApp.js`); the real resolver is covered by `auth/identity.test.js` and `tests/http/auth.test.js`.
 
 ### Real-time collaboration is a second, parallel channel
 
@@ -103,7 +104,7 @@ Code execution (the "Run" button) calls the public Piston API (`emkc.org`) direc
 
 ```
 agents/questionGenerator/       one folder per responsibility (see its README.md)
-  index.js          the only entry point — the rest of the backend imports from here (enforced by tests/aiWiring.test.js)
+  index.js          the only entry point — the rest of the backend imports from here (enforced by tests/architecture/aiWiring.test.js)
   graph/            workflow.js (StateGraph, exported uncompiled) · state.js (state + runtime-context schemas) · nodes/<one per file>
   llm/              models.js — initChatModel("provider:model").withStructuredOutput(zod) · prompts.js
   mcp/leetcode/     client.js — pinned LeetCode MCP server, close()
@@ -111,5 +112,7 @@ agents/questionGenerator/       one folder per responsibility (see its README.md
   execution/        generator.js — createQuestionGenerator({ graph, context }) → { start, resume } · checkpointer.js (PostgresSaver)
   errors.js
 ```
+
+The agent's tests are not next to its code: they live in `src/tests/agents/questionGenerator/`, in the same folder tree (`graph/workflow.js` → `tests/agents/questionGenerator/graph/workflow.test.js`).
 
 `container.js` compiles `workflow` with the checkpointer and builds its runtime context, lazily (`container.ai.setup / warmUp / close` are called by `server.js`); agents never import Prisma or read `process.env`. Models are full LangChain `provider:model` strings: `AI_MODEL` (default `openai:gpt-4o-mini`) and `AI_MODEL_FALLBACK` (default `openai:gpt-4o`); a bare name means OpenAI. Audit and rationale: `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { buildTestApp, PRINCIPALS } from "./testApp.js";
-import { createInterviewService } from "../services/interview.service.js";
-import { INTERVIEW_LIST_SELECT, INTERVIEWER_SELECT } from "../repositories/interview.repository.js";
-import { NotFoundError, ValidationError } from "../shared/errors.js";
+import { buildTestApp, PRINCIPALS } from "../helpers/testApp.js";
+import { createInterviewService } from "../../services/interview.service.js";
+import { INTERVIEW_LIST_SELECT, INTERVIEWER_SELECT } from "../../repositories/interview.repository.js";
+import { NotFoundError, ValidationError } from "../../shared/errors.js";
 
 // Contract details of the interview routes (shapes, Prisma calls). Who may do what is
 // covered by access.test.js; here every request comes from the owner (Ada).

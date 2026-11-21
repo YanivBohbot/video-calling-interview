@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { createQuestionModels } from "./models.js";
-import { AIConfigError } from "../errors.js";
+import { createQuestionModels } from "../../../../agents/questionGenerator/llm/models.js";
+import { AIConfigError } from "../../../../agents/questionGenerator/errors.js";
 
 // A fake initChatModel: records which model string was built and what each structured
 // call received, and answers with the given payload.

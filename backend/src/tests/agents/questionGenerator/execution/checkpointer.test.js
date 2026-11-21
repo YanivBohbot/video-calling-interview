@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createCheckpointer } from "./checkpointer.js";
+import { createCheckpointer } from "../../../../agents/questionGenerator/execution/checkpointer.js";
 
 describe("checkpointer", () => {
   it("keeps its tables out of the Prisma-managed public schema", () => {

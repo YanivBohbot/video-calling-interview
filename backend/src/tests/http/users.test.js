@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { buildTestApp, authAs, PRINCIPALS } from "./testApp.js";
-import { createUserService } from "../services/user.service.js";
-import { USER_SELECT } from "../repositories/user.repository.js";
-import { ConflictError, NotFoundError, ValidationError } from "../shared/errors.js";
+import { buildTestApp, authAs, PRINCIPALS } from "../helpers/testApp.js";
+import { createUserService } from "../../services/user.service.js";
+import { USER_SELECT } from "../../repositories/user.repository.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../shared/errors.js";
 
 const { ada, bob, candidateOf } = PRINCIPALS;
 

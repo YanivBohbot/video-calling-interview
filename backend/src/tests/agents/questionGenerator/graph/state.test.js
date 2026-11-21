@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { StateGraph, START, END } from "@langchain/langgraph";
-import { QuestionSchema, DraftResponseSchema, SearchQuerySchema, QuestionGenState } from "./state.js";
+import { QuestionSchema, DraftResponseSchema, SearchQuerySchema, QuestionGenState } from "../../../../agents/questionGenerator/graph/state.js";
 
 describe("question generator schemas", () => {
   it("accepts a valid question", () => {

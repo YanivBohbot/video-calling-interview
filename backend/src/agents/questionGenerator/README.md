@@ -40,7 +40,13 @@ Dependencies point one way: `execution → graph → (llm, tools → mcp)` only 
 runtime context — nodes never import `llm/` or `mcp/`; `container.js`
 builds those and passes them in. Nothing here imports Prisma or reads `process.env`, and
 nothing outside imports a file other than `index.js` (both enforced by
-`src/tests/aiWiring.test.js`).
+`src/tests/architecture/aiWiring.test.js`).
+
+## Tests
+
+The tests live outside this folder, in `src/tests/agents/questionGenerator/`, with the
+same tree as the code: `graph/nodes/` → `tests/agents/questionGenerator/graph/nodes/nodes.test.js`,
+`mcp/leetcode/client.js` → `tests/agents/questionGenerator/mcp/leetcode/client.test.js`, and so on.
 
 ## The workflow
 

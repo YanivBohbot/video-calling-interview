@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { createContainer } from "../container.js";
-import { createApp } from "../app.js";
-import { TEST_CONFIG, fakeClerkVerifier } from "./testApp.js";
+import { createContainer } from "../../container.js";
+import { createApp } from "../../app.js";
+import { TEST_CONFIG, fakeClerkVerifier } from "../helpers/testApp.js";
 
 // Real identity resolver (no injected test principal): the demo endpoint, and every
 // /api route refusing callers without a verified credential.

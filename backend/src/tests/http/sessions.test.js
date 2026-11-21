@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { buildTestApp } from "./testApp.js";
+import { buildTestApp } from "../helpers/testApp.js";
 
 let prisma;
 let app;

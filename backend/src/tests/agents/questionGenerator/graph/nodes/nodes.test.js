@@ -8,8 +8,8 @@ import {
   validatorNode,
   fallbackNode,
   finalizeNode,
-} from "./index.js";
-import { AIInvalidResponseError } from "../../errors.js";
+} from "../../../../../agents/questionGenerator/graph/nodes/index.js";
+import { AIInvalidResponseError } from "../../../../../agents/questionGenerator/errors.js";
 
 // Runs a node the way LangGraph does: (state, runtime) with the given runtime context.
 const withContext = (node, context = {}) => (state) => node(state, { context });

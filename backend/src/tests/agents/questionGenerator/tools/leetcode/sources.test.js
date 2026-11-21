@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { leetcodeUrl, parseSearchProblems, attachSources } from "./sources.js";
-import { QuestionSchema } from "../../graph/state.js";
+import { leetcodeUrl, parseSearchProblems, attachSources } from "../../../../../agents/questionGenerator/tools/leetcode/sources.js";
+import { QuestionSchema } from "../../../../../agents/questionGenerator/graph/state.js";
 
 describe("leetcodeUrl", () => {
   it("builds the canonical problem URL from a slug", () => {

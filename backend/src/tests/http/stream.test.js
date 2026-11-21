@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { buildTestApp, authAs, PRINCIPALS } from "./testApp.js";
+import { buildTestApp, authAs, PRINCIPALS } from "../helpers/testApp.js";
 
 const NOW_MS = 1_700_000_000_000;
 const NOW_S = 1_700_000_000;

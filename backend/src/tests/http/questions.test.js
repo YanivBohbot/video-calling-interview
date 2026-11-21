@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import { buildTestApp, TEST_CONFIG, authAs, PRINCIPALS } from "./testApp.js";
+import { buildTestApp, TEST_CONFIG, authAs, PRINCIPALS } from "../helpers/testApp.js";
 
 const { ada, bob, demo, candidateOf } = PRINCIPALS;
 import {
   AIConfigError,
   AIProviderError,
   UnknownJobError,
-} from "../agents/questionGenerator/index.js";
+} from "../../agents/questionGenerator/index.js";
 
 // Ported from the pre-refactor aiController tests (same 12 cases), now driven over HTTP
 // through the real container, with fakes injected for the AI pipeline and identity — no vi.mock.
