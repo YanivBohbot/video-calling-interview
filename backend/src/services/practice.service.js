@@ -1,36 +1,48 @@
-import { ConflictError, NotFoundError, RateLimitError } from "../shared/errors.js";
-import { rateKeyFor } from "../shared/rateKeys.js";
+import { AppError, ConflictError, NotFoundError, RateLimitError } from "../shared/errors.js";
+import { CANDIDATE } from "../auth/principal.js";
 
 // Spec caps (starting values).
-export const MAX_SESSIONS_PER_LINK = 3;
+export const MAX_SESSIONS_PER_INTERVIEW = 3;
 export const SESSION_MS = 60 * 60 * 1000;
 export const MAX_MESSAGES = 60;
 
-// Practice sessions with the AI interviewer, for a practice-link principal
-// ({ kind: "practice", interviewId }). The agents are injected: `interviewer`
-// ({ streamTurn, history }) and `coach` ({ review }). The report is written in the
-// background once a session ends; `runInBackground` is injectable so tests can await it.
+// The AI interviewer of an interview room. The invited candidate of the interview talks to
+// it; the interview's owner follows the conversation and reads the report. Anyone else
+// gets 404. The agents are injected: `interviewer` ({ streamTurn, history }) and `coach`
+// ({ review }). The report is written in the background once a session ends;
+// `runInBackground` is injectable so tests can await it.
 export const createPracticeService = ({
   practiceSessionRepository: sessions,
   interviewRepository,
   interviewer,
   coach,
-  codeService,
   messageLimiter,
   now = () => Date.now(),
   runInBackground = (fn) => void fn(),
 }) => {
-  const notFound = () => new NotFoundError("Practice session not found");
+  const notFound = () => new NotFoundError("Not found");
   // Sessions with a turn in progress: two turns at once on one checkpointer thread would
   // both start from the same checkpoint and one exchange would be lost. (Process-local,
   // like the rate limiters.)
   const replying = new Set();
   const isOver = (session) => now() - new Date(session.startedAt).getTime() >= SESSION_MS;
 
-  const loadOwn = async (principal, sessionId) => {
+  // The interview, if the caller may see its AI: its invited candidate or its owner.
+  // `write` (start, send) is the candidate's alone.
+  const loadInterview = async (principal, interviewId, { write = false } = {}) => {
+    const isCandidate = principal.kind === CANDIDATE;
+    if (isCandidate && principal.interviewId !== interviewId) throw notFound();
+    const interview = await interviewRepository.findById(interviewId);
+    if (!interview || (!isCandidate && interview.interviewerId !== principal.userId)) throw notFound();
+    if (write && !isCandidate) throw new AppError(403, "Only the candidate talks to the AI interviewer");
+    return interview;
+  };
+
+  const loadSession = async (principal, interviewId, sessionId, options) => {
+    const interview = await loadInterview(principal, interviewId, options);
     const session = await sessions.findById(sessionId);
-    if (!session || session.interviewId !== principal.interviewId) throw notFound();
-    return session;
+    if (!session || session.interviewId !== interviewId) throw notFound();
+    return { interview, session };
   };
 
   const writeReport = async (sessionId) => {
@@ -50,14 +62,12 @@ export const createPracticeService = ({
     if (await sessions.finish(sessionId)) runInBackground(() => writeReport(sessionId));
   };
 
-  const start = async (principal, { language }) => {
-    const interview = await interviewRepository.findById(principal.interviewId);
-    if (!interview) throw notFound();
+  const start = async (principal, interviewId, { language }) => {
+    await loadInterview(principal, interviewId, { write: true });
     const result = await sessions.startExclusive({
-      interviewId: principal.interviewId,
+      interviewId,
       language,
-      since: interview.practiceCreatedAt,
-      max: MAX_SESSIONS_PER_LINK,
+      max: MAX_SESSIONS_PER_INTERVIEW,
       // An active session older than this was abandoned (tab closed): closed, not blocking.
       staleBefore: new Date(now() - SESSION_MS),
     });
@@ -67,14 +77,26 @@ export const createPracticeService = ({
     return result.session;
   };
 
+  // The active session of the interview, so a refreshed room finds it again.
+  const current = async (principal, interviewId) => {
+    await loadInterview(principal, interviewId);
+    const session = await sessions.findActive(interviewId);
+    if (!session) return { sessionId: null };
+    if (isOver(session)) {
+      await close(session.id);
+      return { sessionId: null };
+    }
+    return { sessionId: session.id };
+  };
+
   const reportStatusOf = (session) => {
     if (session.status === "active") return "none";
     if (!session.report) return "pending";
     return session.report.failed ? "failed" : "ready";
   };
 
-  const get = async (principal, sessionId) => {
-    let session = await loadOwn(principal, sessionId);
+  const get = async (principal, interviewId, sessionId) => {
+    let { session } = await loadSession(principal, interviewId, sessionId);
     if (session.status === "active" && isOver(session)) {
       await close(session.id); // time is up even if the candidate never wrote again
       session = { ...session, status: "finished" };
@@ -94,8 +116,8 @@ export const createPracticeService = ({
   };
 
   // Every refusal is thrown here, before any event: the controller can still answer JSON.
-  const streamMessage = async (principal, sessionId, { text, code, language }, signal) => {
-    const session = await loadOwn(principal, sessionId);
+  const streamMessage = async (principal, interviewId, sessionId, { text, code, language }, signal) => {
+    const { interview, session } = await loadSession(principal, interviewId, sessionId, { write: true });
     if (session.status !== "active") throw new ConflictError("Session finished");
     if (isOver(session)) {
       await close(session.id);
@@ -103,14 +125,12 @@ export const createPracticeService = ({
     }
     if (replying.has(session.id)) throw new ConflictError("A reply is still being written");
     replying.add(session.id);
-    let interview;
     try {
-      const gate = messageLimiter.check(rateKeyFor(principal));
+      const gate = messageLimiter.check(`ai:${interviewId}`);
       if (!gate.ok) throw new RateLimitError("Too many messages, slow down", gate.retryAfter);
       if (!(await sessions.claimMessage(session.id, { max: MAX_MESSAGES, code, language }))) {
         throw new ConflictError("Message limit reached");
       }
-      interview = await interviewRepository.findById(principal.interviewId);
     } catch (err) {
       replying.delete(session.id);
       throw err;
@@ -121,8 +141,8 @@ export const createPracticeService = ({
       text,
       code,
       language,
-      role: interview?.role ?? "",
-      interviewType: interview?.interviewType ?? "technical",
+      role: interview.role ?? "",
+      interviewType: interview.interviewType ?? "technical",
       signal,
     });
     return (async function* () {
@@ -141,13 +161,12 @@ export const createPracticeService = ({
     })();
   };
 
-  const finish = async (principal, sessionId) => {
-    const session = await loadOwn(principal, sessionId);
+  // The candidate or the owner may end the session.
+  const finish = async (principal, interviewId, sessionId) => {
+    const { session } = await loadSession(principal, interviewId, sessionId);
     await close(session.id);
     return { status: "finished" };
   };
 
-  const run = (principal, body) => codeService.run(principal, body);
-
-  return { start, get, streamMessage, finish, run };
+  return { start, current, get, streamMessage, finish };
 };

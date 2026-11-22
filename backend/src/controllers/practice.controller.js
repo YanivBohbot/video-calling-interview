@@ -14,19 +14,19 @@ const eventData = (event) => {
 
 export const createPracticeController = ({ practiceService }) => ({
   start: handle("Error starting practice session", async (req, res) => {
-    res.status(201).json(await practiceService.start(req.principal, req.body));
+    res.status(201).json(await practiceService.start(req.principal, req.params.id, req.body));
+  }),
+
+  current: handle("Error fetching practice session", async (req, res) => {
+    res.status(200).json(await practiceService.current(req.principal, req.params.id));
   }),
 
   get: handle("Error fetching practice session", async (req, res) => {
-    res.status(200).json(await practiceService.get(req.principal, req.params.sid));
+    res.status(200).json(await practiceService.get(req.principal, req.params.id, req.params.sid));
   }),
 
   finish: handle("Error finishing practice session", async (req, res) => {
-    res.status(200).json(await practiceService.finish(req.principal, req.params.sid));
-  }),
-
-  run: handle("Failed to run code", async (req, res) => {
-    res.status(200).json(await practiceService.run(req.principal, req.body));
+    res.status(200).json(await practiceService.finish(req.principal, req.params.id, req.params.sid));
   }),
 
   // POST + text/event-stream (the browser reads it with fetch, not EventSource).
@@ -35,7 +35,7 @@ export const createPracticeController = ({ practiceService }) => ({
     const aborter = new AbortController();
     let events;
     try {
-      events = await practiceService.streamMessage(req.principal, req.params.sid, req.body, aborter.signal);
+      events = await practiceService.streamMessage(req.principal, req.params.id, req.params.sid, req.body, aborter.signal);
     } catch (err) {
       return next(err instanceof AppError ? err : new InternalError("Error sending message", { cause: err }));
     }

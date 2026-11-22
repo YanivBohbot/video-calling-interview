@@ -203,3 +203,12 @@ Règles (étendues dans `tests/architecture/`) :
 
 Noms de fichiers internes non listés, textes de l'interface, mise en page de la page
 d'entraînement (dans le style existant), formulation exacte des prompts.
+
+## Révision du 22/11 (décision de l'utilisateur)
+
+Elle remplace, pour l'étape 1, le parcours « lien d'entraînement » et la règle « bilan réservé au candidat » :
+
+- L'intervieweur IA est un **panneau de la room existante** (vidéo, éditeur partagé, Run, tableau blanc), pas une page à part. Il lit le code de l'éditeur partagé.
+- Le candidat y arrive avec le **lien d'invitation actuel** : plus de lien d'entraînement séparé, plus de principal `practice` ni de colonnes `practiceTokenHash` / `practiceCreatedAt`.
+- **Seul le candidat** démarre la séance et écrit à l'IA. L'intervieweur humain, dans la même room, **voit la conversation** (rafraîchie toutes les 3 s) et **le bilan** ; il peut terminer la séance.
+- Routes : `/api/interviews/:id/ai/sessions` (`POST`, `GET current`, `GET :sid`, `POST :sid/messages`, `POST :sid/finish`). Plafond : 3 séances **par entretien**.

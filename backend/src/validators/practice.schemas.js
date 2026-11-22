@@ -15,4 +15,4 @@ export const practiceMessageBody = z.object({
   language,
 });
 
-export const practiceSessionParams = z.object({ sid: z.string().min(1) });
+export const practiceSessionParams = z.object({ id: z.string().min(1), sid: z.string().min(1) });

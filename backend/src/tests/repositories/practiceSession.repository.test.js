@@ -39,9 +39,16 @@ describe("practiceSession repository", () => {
   });
 });
 
+describe("practiceSession repository — findActive", () => {
+  it("returns the interview's active session", async () => {
+    const findFirst = vi.fn().mockResolvedValue({ id: "s1" });
+    expect(await repoWith({ findFirst }).findActive("iv-1")).toEqual({ id: "s1" });
+    expect(findFirst).toHaveBeenCalledWith({ where: { interviewId: "iv-1", status: "active" } });
+  });
+});
+
 describe("practiceSession repository — startExclusive", () => {
   const STALE = new Date("2026-11-22T11:00:00Z");
-  const SINCE = new Date("2026-11-20T00:00:00Z");
   const txWith = (session) => {
     const calls = [];
     const tx = {
@@ -56,7 +63,7 @@ describe("practiceSession repository — startExclusive", () => {
     const prisma = { aiPracticeSession: {}, $transaction: vi.fn(async (fn) => fn(tx)) };
     return { repo: createPracticeSessionRepository({ prisma }), tx, calls };
   };
-  const start = (repo) => repo.startExclusive({ interviewId: "iv-1", language: "python", since: SINCE, max: 3, staleBefore: STALE });
+  const start = (repo) => repo.startExclusive({ interviewId: "iv-1", language: "python", max: 3, staleBefore: STALE });
 
   it("takes the interview's lock before reading, then creates", async () => {
     const { repo, calls } = txWith({ active: null, used: 0 });
@@ -81,7 +88,7 @@ describe("practiceSession repository — startExclusive", () => {
   it("refuses past the cap", async () => {
     const { repo, tx } = txWith({ active: null, used: 3 });
     expect(await start(repo)).toEqual({ conflict: "limit", closedId: null });
-    expect(tx.aiPracticeSession.count).toHaveBeenCalledWith({ where: { interviewId: "iv-1", startedAt: { gte: SINCE } } });
+    expect(tx.aiPracticeSession.count).toHaveBeenCalledWith({ where: { interviewId: "iv-1" } });
     expect(tx.aiPracticeSession.create).not.toHaveBeenCalled();
   });
 });

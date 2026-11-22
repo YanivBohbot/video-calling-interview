@@ -53,7 +53,7 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 // Run button: per caller (see services/code.service.js).
 const CODE_RUNS_PER_MINUTE = 30;
 const ONE_MINUTE_MS = 60 * 1000;
-// AI practice: messages per practice link.
+// AI interviewer: messages per interview.
 const PRACTICE_MESSAGES_PER_MINUTE = 10;
 // Practice links created in demo mode, shared by every demo visitor (each opens 3 sessions).
 const DEMO_PRACTICE_LINKS_PER_HOUR = 3;
@@ -210,7 +210,6 @@ export const createContainer = ({
       history: (sessionId) => getPracticeAgents().interviewer.history(sessionId),
     },
     coach: { review: (args) => getPracticeAgents().coach.review(args) },
-    codeService: services.code,
     messageLimiter: createRateLimiter({ max: PRACTICE_MESSAGES_PER_MINUTE, windowMs: ONE_MINUTE_MS }),
     now,
   });
