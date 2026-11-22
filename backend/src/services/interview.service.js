@@ -15,7 +15,7 @@ const assertStatus = (status) => {
 
 // Every method takes the caller (principal) first. Interviewers and the demo visitor
 // only ever see their own interviews: anything else is "not found", so ids can't be probed.
-export const createInterviewService = ({ interviewRepository, clientUrl }) => {
+export const createInterviewService = ({ interviewRepository, practiceSessionRepository, clientUrl }) => {
   const notFound = () => new NotFoundError("Interview not found");
 
   const isOwner = (principal, interview) => !!interview && interview.interviewerId === principal.userId;
@@ -111,6 +111,26 @@ export const createInterviewService = ({ interviewRepository, clientUrl }) => {
     return { url: `${clientUrl}/room/${encodeURIComponent(id)}#invite=${secret}` };
   };
 
+  // New AI practice link (candidate-only); replaces any previous one. Only the hash is stored.
+  const createPracticeLink = async (principal, id) => {
+    await assertOwned(principal, id);
+    const { secret, hash } = generateInviteSecret();
+    await interviewRepository.setPracticeHash(id, hash);
+    return { url: `${clientUrl}/practice/${encodeURIComponent(id)}#practice=${secret}` };
+  };
+
+  // What the interviewer may know about practice: when the link was made and when it was
+  // used. Never the messages, the code or the report (those are the candidate's).
+  const practiceUsage = async (principal, id) => {
+    const interview = await interviewRepository.findById(id);
+    if (!isOwner(principal, interview)) throw notFound();
+    const sessions = await practiceSessionRepository.listForInterview(id);
+    return {
+      createdAt: interview.practiceCreatedAt ?? null,
+      sessions: sessions.map(({ status, startedAt, finishedAt }) => ({ status, startedAt, finishedAt })),
+    };
+  };
+
   // The room page: owners get the full interview, the invited candidate a reduced view.
   const roomView = async (principal, id) => {
     if (principal.kind === CANDIDATE) {
@@ -132,6 +152,8 @@ export const createInterviewService = ({ interviewRepository, clientUrl }) => {
     dashboardStats,
     recentActivity,
     createInvite,
+    createPracticeLink,
+    practiceUsage,
     roomView,
   };
 };

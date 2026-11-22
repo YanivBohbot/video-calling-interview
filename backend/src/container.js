@@ -13,6 +13,7 @@ import { createIdentityResolver } from "./auth/identityResolver.js";
 import { createSessionRepository } from "./repositories/session.repository.js";
 import { createUserRepository } from "./repositories/user.repository.js";
 import { createInterviewRepository } from "./repositories/interview.repository.js";
+import { createPracticeSessionRepository } from "./repositories/practiceSession.repository.js";
 
 import { createSessionService } from "./services/session.service.js";
 import { createUserService } from "./services/user.service.js";
@@ -72,6 +73,7 @@ export const createContainer = ({
     session: createSessionRepository({ prisma }),
     user: createUserRepository({ prisma }),
     interview: createInterviewRepository({ prisma }),
+    practiceSession: createPracticeSessionRepository({ prisma }),
   };
 
   // ── AI question generator (built on first use: the Postgres checkpointer and
@@ -124,7 +126,11 @@ export const createContainer = ({
   const services = {
     session: createSessionService({ sessionRepository: repositories.session }),
     user: userService,
-    interview: createInterviewService({ interviewRepository: repositories.interview, clientUrl: config.clientUrl }),
+    interview: createInterviewService({
+      interviewRepository: repositories.interview,
+      practiceSessionRepository: repositories.practiceSession,
+      clientUrl: config.clientUrl,
+    }),
     question: createQuestionService({
       interviewRepository: repositories.interview,
       generation: questionGeneration,

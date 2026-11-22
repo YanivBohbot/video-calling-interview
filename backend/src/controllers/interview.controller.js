@@ -57,6 +57,14 @@ export const createInterviewController = ({ interviewService }) => ({
     res.status(200).json(await interviewService.createInvite(req.principal, req.params.id));
   }),
 
+  practiceLink: handle("Error creating practice link", async (req, res) => {
+    res.status(200).json(await interviewService.createPracticeLink(req.principal, req.params.id));
+  }),
+
+  practiceUsage: handle("Error fetching practice usage", async (req, res) => {
+    res.status(200).json(await interviewService.practiceUsage(req.principal, req.params.id));
+  }),
+
   room: handle("Error fetching interview", async (req, res) => {
     const { viewer, interview } = await interviewService.roomView(req.principal, req.params.id);
     res.status(200).json(viewer === "candidate" ? toCandidateRoomDoc(interview) : toInterviewDoc(interview));
