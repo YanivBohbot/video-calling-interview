@@ -1,7 +1,12 @@
 import { createAgent } from "langchain";
 import { z } from "zod";
 import { createRunCodeTool, createReadCandidateCodeTool } from "../tools/index.js";
-import { createCallBudget, withFallback, createLoggingMiddleware } from "../middleware/index.js";
+import {
+  createCallBudget,
+  withFallback,
+  createLoggingMiddleware,
+  requireToolBeforeResponse,
+} from "../middleware/index.js";
 import { reportFormat } from "./report.js";
 import { COACH_PROMPT, buildCoachInput } from "./prompts.js";
 
@@ -36,6 +41,8 @@ export const createPracticeCoach = ({ model, fallbackModel, runCode, languages, 
       middleware: [
         // Not turnLimits(): its after_model hooks break the structured-answer retry (see budget.js).
         createCallBudget({ modelCalls: MODEL_CALLS, toolCalls: TOOL_CALLS }),
+        // No report before at least one real run of the candidate's code.
+        requireToolBeforeResponse({ tool: "run_code" }),
         ...withFallback(fallbackModel),
         createLoggingMiddleware({ agent: "practiceCoach", log }),
       ],
@@ -52,9 +59,11 @@ export const createPracticeCoach = ({ model, fallbackModel, runCode, languages, 
     }
     const report = result?.structuredResponse;
     if (!report) throw new CoachFailedError();
-    // Honest report: drop tests the model never ran, and show what the code really printed.
+    // Honest report: drop tests the model never ran, let each run back one test only, and
+    // show what the code really printed.
+    const cited = new Set();
     const testsRun = report.testsRun
-      .filter((test) => runs.has(test.runId))
+      .filter((test) => runs.has(test.runId) && !cited.has(test.runId) && cited.add(test.runId))
       .map((test) => ({ ...test, actual: runs.get(test.runId) }));
     return { ...report, testsRun };
   };

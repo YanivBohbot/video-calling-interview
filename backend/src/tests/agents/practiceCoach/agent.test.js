@@ -39,13 +39,24 @@ describe("practice coach agent", () => {
     expect(result.summary).toBe("Good start.");
   });
 
+  it("lets one run back one test only (no five tests citing the same run)", async () => {
+    const runCode = vi.fn().mockResolvedValue({ output: "[0, 1]\n", exitCode: 0, timedOut: false });
+    const model = fakeModel()
+      .respondWithTools([{ name: "run_code", args: { language: "python", code: "print(1)" } }])
+      .respondWithTools([{ name: REPORT_TOOL, args: report([test("run-1", "a"), test("run-1", "b")]) }]);
+    const result = await createPracticeCoach({ model, runCode, languages: LANGUAGES }).review(SESSION);
+    expect(result.testsRun).toHaveLength(1);
+  });
+
   it("gets a valid report after an invalid structured answer", async () => {
     const model = fakeModel()
+      .respondWithTools([{ name: "run_code", args: { language: "python", code: "print(1)" } }])
       .respondWithTools([{ name: REPORT_TOOL, args: { summary: 42 } }])
       .respondWithTools([{ name: REPORT_TOOL, args: report([]) }]);
-    const result = await createPracticeCoach({ model, runCode: vi.fn(), languages: LANGUAGES }).review(SESSION);
+    const runCode = vi.fn().mockResolvedValue({ output: "1\n", exitCode: 0, timedOut: false });
+    const result = await createPracticeCoach({ model, runCode, languages: LANGUAGES }).review(SESSION);
     expect(result.complexity.time).toBe("O(n^2)");
-    expect(model.callCount).toBe(2);
+    expect(model.callCount).toBe(3);
   });
 
   it("throws CoachFailedError when no report comes out", async () => {
@@ -55,9 +66,19 @@ describe("practice coach agent", () => {
     );
   });
 
+  it("does not accept a report written before any code ran", async () => {
+    const model = fakeModel().respondWithTools([{ name: REPORT_TOOL, args: report([]) }]).respond(new AIMessage("Done."));
+    await expect(createPracticeCoach({ model, runCode: vi.fn(), languages: LANGUAGES }).review(SESSION)).rejects.toBeInstanceOf(
+      CoachFailedError,
+    );
+  });
+
   it("sends the transcript and the final code to the model", async () => {
-    const model = fakeModel().respondWithTools([{ name: REPORT_TOOL, args: report([]) }]);
-    await createPracticeCoach({ model, runCode: vi.fn(), languages: LANGUAGES }).review(SESSION);
+    const model = fakeModel()
+      .respondWithTools([{ name: "run_code", args: { language: "python", code: "print(1)" } }])
+      .respondWithTools([{ name: REPORT_TOOL, args: report([]) }]);
+    const runCode = vi.fn().mockResolvedValue({ output: "1\n", exitCode: 0, timedOut: false });
+    await createPracticeCoach({ model, runCode, languages: LANGUAGES }).review(SESSION);
     const sent = JSON.stringify(model.calls[0].messages);
     expect(sent).toContain("Write two_sum.");
     expect(sent).toContain("def two_sum(a, t): ...");
