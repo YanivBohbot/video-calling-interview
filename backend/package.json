@@ -8,7 +8,8 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "piston:install": "node scripts/install-piston-packages.js"
   },
   "prisma": {
     "seed": "node src/lib/seed.js"

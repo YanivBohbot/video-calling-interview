@@ -30,6 +30,14 @@ describe("loadConfig", () => {
     expect(loadConfig(base).openaiApiKey).toBeUndefined();
   });
 
+  it("defaults PISTON_URL to the local Piston container", () => {
+    expect(loadConfig(base).pistonUrl).toBe("http://localhost:2000");
+  });
+
+  it("reads PISTON_URL when set", () => {
+    expect(loadConfig({ ...base, PISTON_URL: "http://piston:2000" }).pistonUrl).toBe("http://piston:2000");
+  });
+
   it("names missing variables without echoing any value", () => {
     let message = "";
     try {

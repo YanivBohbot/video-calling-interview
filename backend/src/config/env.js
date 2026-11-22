@@ -24,6 +24,8 @@ const EnvSchema = z.object({
   CLERK_PUBLISHABLE_KEY: optional,
   // Signs the demo ("Continue as Guest") tokens.
   DEMO_TOKEN_SECRET: z.string().min(32),
+  // The self-hosted Piston that runs candidate code (docker compose service "piston").
+  PISTON_URL: blankAsUnset(z.string().url().default("http://localhost:2000")),
 });
 
 // Parses the environment once, at boot (never on import, so tests need no env).
@@ -46,5 +48,6 @@ export const loadConfig = (env) => {
     stream: Object.freeze({ apiKey: e.STREAM_API_KEY, apiSecret: e.STREAM_API_SECRET }),
     clerk: Object.freeze({ secretKey: e.CLERK_SECRET_KEY, publishableKey: e.CLERK_PUBLISHABLE_KEY }),
     demoTokenSecret: e.DEMO_TOKEN_SECRET,
+    pistonUrl: e.PISTON_URL,
   });
 };
