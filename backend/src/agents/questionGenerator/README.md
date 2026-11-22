@@ -22,23 +22,19 @@ questionGenerator/
 │   ├── models.js            initChatModel("provider:model").withStructuredOutput(zod)
 │   └── prompts.js           system prompts
 │
-├── mcp/                     MCP server connections — one folder per server
+├── tools/                   helpers for the data the graph uses — one folder per source
 │   └── leetcode/
-│       └── client.js        LeetCode MCP server via @langchain/mcp-adapters (pinned, closable)
-│
-├── tools/                   the tools the graph uses — one folder per source
-│   └── leetcode/
-│       ├── search.js        the search_problems call the researcher runs
-│       └── sources.js       parse results, attach verified sources to questions
+│       └── sources.js       attach verified LeetCode sources to drafted questions
 │
 └── execution/               running it
     ├── generator.js         start / resume a generation (one thread per job)
     └── checkpointer.js      PostgresSaver, own "langgraph" schema
 ```
 
-Dependencies point one way: `execution → graph → (llm, tools → mcp)` only through the
-runtime context — nodes never import `llm/` or `mcp/`; `container.js`
-builds those and passes them in. Nothing here imports Prisma or reads `process.env`, and
+Dependencies point one way: `execution → graph → (llm, tools)`, and the outside world comes
+in only through the runtime context — nodes never import `llm/`, and nothing here imports
+`src/integrations/`: `container.js` builds the models and the LeetCode client
+(`integrations/leetcode/client.js`, a direct GraphQL call) and passes them in. Nothing here imports Prisma or reads `process.env`, and
 nothing outside imports a file other than `index.js` (both enforced by
 `src/tests/architecture/aiWiring.test.js`).
 
@@ -46,7 +42,8 @@ nothing outside imports a file other than `index.js` (both enforced by
 
 The tests live outside this folder, in `src/tests/agents/questionGenerator/`, with the
 same tree as the code: `graph/nodes/` → `tests/agents/questionGenerator/graph/nodes/nodes.test.js`,
-`mcp/leetcode/client.js` → `tests/agents/questionGenerator/mcp/leetcode/client.test.js`, and so on.
+`tools/leetcode/sources.js` → `tests/agents/questionGenerator/tools/leetcode/sources.test.js`, and so on.
+The LeetCode client itself is tested in `src/tests/integrations/leetcode/`.
 
 ## The workflow
 
@@ -76,7 +73,7 @@ START → planner → researcher → drafter → validator ─┬→ humanApprov
 | Human approval with `interrupt()` + `Command({ resume })`, one `thread_id` per job (`interviewId:jobId`) | [Human-in-the-loop](https://docs.langchain.com/oss/javascript/langgraph/interrupts) |
 | `PostgresSaver` in its own `langgraph` schema, `setup()` at boot | [Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) |
 | `initChatModel("provider:model").withStructuredOutput(zodSchema)` | [Models — structured output](https://docs.langchain.com/oss/javascript/langchain/models) |
-| MCP tools through `@langchain/mcp-adapters`, server version pinned | [MCP](https://docs.langchain.com/oss/javascript/langchain/mcp) |
+| LeetCode search through a plain client (`integrations/leetcode`, GraphQL) injected as `searchProblems`. An MCP server added nothing here: the code, not the model, runs a single fixed search | [Workflows and agents](https://docs.langchain.com/oss/javascript/langgraph/workflows-agents) |
 
 **Why a workflow and not `createAgent`.** `createAgent` is LangChain's tool-calling *agent
 loop*. This pipeline has fixed steps, so it is a LangGraph *workflow*
@@ -86,7 +83,7 @@ earlier agent version let the model drive the search tool; it ignored the offset
 the same problems and hit its step limit.
 
 **No `langgraph.json`.** LangGraph Studio (`langgraph dev`) would have to run the graph
-without our runtime context (models, MCP client, repository), which only the container
+without our runtime context (models, LeetCode client, repository), which only the container
 builds. Supporting it would mean reading `process.env` and importing Prisma in here.
 
 ## Configuration

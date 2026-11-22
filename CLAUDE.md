@@ -34,10 +34,12 @@ npm run build     # tsc -b && vite build
 npm run lint      # eslint .
 ```
 
-**Database** — Postgres 16 runs in Docker (`docker-compose.yml` at repo root), mapped to host port **5436** (not the default 5432), user/db `talentiq`/`talentiq_secret`.
+**Database** — Postgres 16 runs in Docker (`docker-compose.yml` at repo root), mapped to host port **6300** (not the default 5432), user/db `talentiq`/`talentiq_secret`.
 ```bash
-docker compose up -d
+docker compose up -d          # postgres + piston
+npm run piston:install        # from backend/, once: installs node, typescript, python, java, gcc into Piston
 ```
+The `piston` service (port 2000, `PISTON_URL`) runs code for the editor's Run button; the public Piston API is whitelist-only since 2026-02-15.
 
 ## Architecture
 
@@ -60,7 +62,8 @@ backend/src/
   tests/           http/ (cross-layer HTTP tests: buildTestApp() = real container over a stub prisma + fakes)
                    agents/questionGenerator/ (agent tests, same tree as the agent) · architecture/ (import-rule guards) · helpers/testApp.js
   realtime/        Socket.io: attachRealtime, one handler per event, roomState, roomQuestions, flushScheduler
-  agents/          LangGraph question-generator pipeline + LeetCode MCP client
+  agents/          LangGraph question-generator pipeline
+  integrations/    plain HTTP clients for external services: piston/client.js (runs code), leetcode/client.js (GraphQL search)
   lib/             db.js (prisma singleton), rateLimiter.js, seed.js
 ```
 
@@ -92,7 +95,7 @@ Every `/api` route (except `GET /health` and `POST /api/auth/demo`) and every So
 
 `realtime/index.js` attaches Socket.io to the same HTTP server (not under `/api`). Rooms are joined by interview ID; `CollaborativeEditor.tsx` connects to `API_URL` with `auth: socketAuth` (credential checked once, at connection) and uses `join-room`, `code-change`/`code-update`, `language-change`/`language-update`, `question-change`/`question-update`, `code-execution`/`execution-result`. Events from a socket that hasn't joined the room are ignored; `join-room` is refused (`error-message: Forbidden`) for rooms the principal doesn't own (candidates: only their interview). Code is autosaved to `Interview.codeSnapshot` every 10 s, when the last participant leaves, and on SIGINT/SIGTERM; a rejoining client gets the current question, then live code (or the saved snapshot).
 
-Code execution (the "Run" button) calls the public Piston API (`emkc.org`) directly from the frontend — it is not proxied through the backend.
+Code execution (the "Run" button) goes through `POST /api/code/run` (any principal, 30 runs/min per caller), which calls the self-hosted Piston via `integrations/piston/client.js`; a Piston outage answers 502 "Code runner unavailable".
 
 ### Frontend routing has a manual demo-mode bypass
 
@@ -100,19 +103,18 @@ Code execution (the "Run" button) calls the public Piston API (`emkc.org`) direc
 
 ### AI question generator
 
-`backend/src/agents/` drafts interview questions with a LangGraph pipeline (planner → researcher → drafter → validator → human approval → finalize), grounded on LeetCode problems via the LeetCode MCP server; approved questions land in `Interview.questions` (Json).
+`backend/src/agents/` drafts interview questions with a LangGraph pipeline (planner → researcher → drafter → validator → human approval → finalize), grounded on real LeetCode problems found with `integrations/leetcode/client.js` (LeetCode's GraphQL API, injected by `container.js`); approved questions land in `Interview.questions` (Json).
 
 ```
 agents/questionGenerator/       one folder per responsibility (see its README.md)
   index.js          the only entry point — the rest of the backend imports from here (enforced by tests/architecture/aiWiring.test.js)
   graph/            workflow.js (StateGraph, exported uncompiled) · state.js (state + runtime-context schemas) · nodes/<one per file>
   llm/              models.js — initChatModel("provider:model").withStructuredOutput(zod) · prompts.js
-  mcp/leetcode/     client.js — pinned LeetCode MCP server, close()
-  tools/leetcode/   search.js · sources.js
+  tools/leetcode/   sources.js — attaches verified LeetCode sources to drafted questions
   execution/        generator.js — createQuestionGenerator({ graph, context }) → { start, resume } · checkpointer.js (PostgresSaver)
   errors.js
 ```
 
 The agent's tests are not next to its code: they live in `src/tests/agents/questionGenerator/`, in the same folder tree (`graph/workflow.js` → `tests/agents/questionGenerator/graph/workflow.test.js`).
 
-`container.js` compiles `workflow` with the checkpointer and builds its runtime context, lazily (`container.ai.setup / warmUp / close` are called by `server.js`); agents never import Prisma or read `process.env`. Models are full LangChain `provider:model` strings: `AI_MODEL` (default `openai:gpt-4o-mini`) and `AI_MODEL_FALLBACK` (default `openai:gpt-4o`); a bare name means OpenAI. Audit and rationale: `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.
+`container.js` compiles `workflow` with the checkpointer and builds its runtime context, lazily (`container.ai.setup` is called by `server.js`); agents never import Prisma, `src/integrations/` or read `process.env`. Models are full LangChain `provider:model` strings: `AI_MODEL` (default `openai:gpt-4o-mini`) and `AI_MODEL_FALLBACK` (default `openai:gpt-4o`); a bare name means OpenAI. Audit and rationale: `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.

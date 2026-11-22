@@ -5,10 +5,13 @@ import { createInterviewRepository } from "../../repositories/interview.reposito
 
 describe("AI wiring", () => {
   it("builds nothing AI-related until a generation is requested", () => {
-    const createClient = vi.fn();
-    const container = createContainer({ config: TEST_CONFIG, prisma: {}, ai: { createMcpClient: createClient } });
-    expect(container.ai).toBeDefined();
-    expect(createClient).not.toHaveBeenCalled();
+    const searchProblems = vi.fn();
+    const container = createContainer({ config: TEST_CONFIG, prisma: {}, leetcode: { searchProblems } });
+    expect(container.ai.setup).toBeTypeOf("function");
+    // No MCP child process any more: nothing to warm up or stop.
+    expect(container.ai.warmUp).toBeUndefined();
+    expect(container.ai.close).toBeUndefined();
+    expect(searchProblems).not.toHaveBeenCalled();
   });
 
   it("saves approved questions through the interview repository", async () => {
@@ -25,6 +28,17 @@ describe("AI wiring", () => {
     for (const f of files) {
       const code = fs.readFileSync(path.join(dir, f), "utf8");
       expect(code, f).not.toMatch(/lib\/db\.js|process\.env/);
+    }
+  });
+
+  it("agents never import integrations/ (clients are injected by container.js)", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const dir = path.resolve(import.meta.dirname, "../../agents");
+    const files = fs.readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".js"));
+    for (const f of files) {
+      const code = fs.readFileSync(path.join(dir, f), "utf8");
+      expect(code, f).not.toMatch(/integrations\//);
     }
   });
 

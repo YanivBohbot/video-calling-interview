@@ -3,13 +3,10 @@
 //
 //   graph/      what the pipeline is: state, nodes (one per file), workflow wiring
 //   llm/        the model calls (structured output) and their prompts
-//   mcp/        MCP server connections (one folder per server)
-//   tools/      the tools the graph uses (one folder per source)
+//   tools/      helpers for the data the graph uses (one folder per source)
 //   execution/  running it: start/resume a generation, Postgres checkpointer
 export { workflow } from "./graph/workflow.js";
 export { createQuestionModels } from "./llm/models.js";
-export { createLeetCodeTools, LEETCODE_MCP_PACKAGE } from "./mcp/leetcode/client.js";
-export { createSearchProblems } from "./tools/leetcode/search.js";
 export { leetcodeUrl } from "./tools/leetcode/sources.js";
 export { createCheckpointer } from "./execution/checkpointer.js";
 export { createQuestionGenerator } from "./execution/generator.js";

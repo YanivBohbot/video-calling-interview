@@ -36,8 +36,8 @@ export const DraftResponseSchema = z.object({
   questions: z.array(DraftQuestionSchema),
 });
 
-// Subsets of the LeetCode MCP search_problems enums, so whatever the model picks is
-// an input the tool accepts.
+// Subsets of LeetCode's problem-list filter values, so whatever the model picks is
+// an input the LeetCode search accepts.
 export const SEARCH_CATEGORIES = ["algorithms", "database", "pandas", "javascript", "shell", "concurrency"];
 export const SEARCH_TAGS = [
   "array", "string", "hash-table", "dynamic-programming", "math", "sorting", "greedy",
@@ -61,7 +61,7 @@ export const SearchQuerySchema = z.object({
 const fn = () => z.custom((v) => typeof v === "function", { message: "must be a function" });
 export const QuestionGenContext = z.object({
   chooseSearch: fn(), // ({ role, interviewType }) → LeetCode search filters  (models.js)
-  searchProblems: fn(), // (filters) → [{ slug, title, difficulty }]          (tools/leetcode/search.js)
+  searchProblems: fn(), // (filters) → [{ slug, title, difficulty }]          (injected by container.js)
   draft: fn(), // ({ useFallbackModel, prompt }) → { questions }                 (models.js)
   saveQuestions: fn(), // (interviewId, questions) → void          (interview repository)
   random: fn().optional(), // () → [0, 1); defaults to Math.random (tests pin it)

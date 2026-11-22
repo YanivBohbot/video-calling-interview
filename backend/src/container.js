@@ -2,8 +2,6 @@ import { StreamClient } from "@stream-io/node-sdk";
 import { createRateLimiter } from "./lib/rateLimiter.js";
 import {
   workflow,
-  createLeetCodeTools,
-  createSearchProblems,
   createQuestionModels,
   createCheckpointer,
   createQuestionGenerator,
@@ -38,6 +36,7 @@ import { createQuestionRouter } from "./routes/question.routes.js";
 import { createStreamRouter } from "./routes/stream.routes.js";
 import { createCodeRouter } from "./routes/code.routes.js";
 import { createPistonClient } from "./integrations/piston/client.js";
+import { createLeetCodeClient } from "./integrations/leetcode/client.js";
 import { createAuthRouter } from "./routes/auth.routes.js";
 
 const AI_GENERATIONS_PER_HOUR = 10;
@@ -54,18 +53,18 @@ const ONE_MINUTE_MS = 60 * 1000;
 //
 // The optional parameters let tests swap an external dependency for a fake
 // (AI pipeline, Clerk, Stream client, code runner, clock) while keeping everything else real.
-// `ai.createMcpClient` replaces the LeetCode MCP client (tests).
+// `leetcode` replaces the LeetCode GraphQL client (tests).
 // `identityResolver` replaces the whole credential check — HTTP tests use it to act as a
 // given principal without minting real tokens (the real resolver has its own tests).
 export const createContainer = ({
   config,
   prisma,
   generation,
-  ai: aiOptions = {},
   clerkVerifier,
   identityResolver,
   getStreamClient,
   codeRunner,
+  leetcode,
   now,
 }) => {
   // ── Repositories ──────────────────────────────────────────────────────────
@@ -75,32 +74,28 @@ export const createContainer = ({
     interview: createInterviewRepository({ prisma }),
   };
 
-  // ── AI question generator (built on first use: MCP child process, Postgres
-  //    checkpointer and models are only created when someone generates) ──────
+  // ── AI question generator (built on first use: the Postgres checkpointer and
+  //    the models are only created when someone generates) ──────────────────
   let aiStack;
   const getAi = () => {
     if (!aiStack) {
-      const leetcode = createLeetCodeTools({ createClient: aiOptions.createMcpClient });
       const models = createQuestionModels({ model: config.aiModel, fallbackModel: config.aiModelFallback });
       const checkpointer = createCheckpointer({ connectionString: config.databaseUrl });
       const graph = workflow.compile({ checkpointer });
       // The graph's runtime context (QuestionGenContext): what the nodes call.
       const context = {
         chooseSearch: models.chooseSearch,
-        searchProblems: createSearchProblems({ getTools: leetcode.getTools }),
+        searchProblems: (leetcode ?? createLeetCodeClient()).searchProblems,
         draft: models.draft,
         saveQuestions: repositories.interview.saveQuestions,
       };
-      aiStack = { leetcode, checkpointer, generator: createQuestionGenerator({ graph, context }) };
+      aiStack = { checkpointer, generator: createQuestionGenerator({ graph, context }) };
     }
     return aiStack;
   };
   const ai = {
-    // Boot: create the checkpointer tables and warm the LeetCode MCP connection.
+    // Boot: create the checkpointer tables.
     setup: () => getAi().checkpointer.setup(),
-    warmUp: () => getAi().leetcode.getTools(),
-    // Shutdown: stop the MCP child process if it was started.
-    close: async () => aiStack?.leetcode.close(),
   };
   const questionGeneration = generation ?? {
     start: (args) => getAi().generator.start(args),
