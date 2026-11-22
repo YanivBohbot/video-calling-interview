@@ -31,7 +31,7 @@ describe("practice interviewer agent", () => {
       .respond(new AIMessage("Here is your problem, inspired by Two Sum (https://leetcode.com/problems/two-sum/)."));
     const { interviewer, deps } = build(model);
     const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "Hi, I'm ready.", ...TURN }));
-    expect(events[0]).toEqual({ type: "tool", name: "find_problem" });
+    expect(events[0]).toEqual({ type: "tool", name: "find_problem", endsSession: false });
     const text = events.filter((e) => e.type === "token").map((e) => e.text).join("");
     expect(text).toContain("Two Sum");
     expect(events.at(-1)).toEqual({ type: "done", ended: false, limited: false });
@@ -54,6 +54,8 @@ describe("practice interviewer agent", () => {
     const { interviewer } = build(model);
     const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "I'm done", ...TURN }));
     expect(events.at(-1)).toEqual({ type: "done", ended: true, limited: false });
+    // Flagged at the tool call itself: the service needs no tool names.
+    expect(events.filter((e) => e.type === "tool")).toEqual([{ type: "tool", name: "end_session", endsSession: true }]);
   });
 
   it("stops a looping turn after 6 model calls and reports limited", async () => {

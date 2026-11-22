@@ -5,8 +5,6 @@ const USAGE_SELECT = { id: true, status: true, startedAt: true, finishedAt: true
 export const createPracticeSessionRepository = ({ prisma }) => {
   const sessions = prisma.aiPracticeSession;
   return {
-    create: ({ interviewId, language }) => sessions.create({ data: { interviewId, language } }),
-
     findById: (id) => sessions.findUnique({ where: { id } }),
 
     // Starts a session if the link allows it, atomically: a per-interview advisory lock
@@ -29,10 +27,6 @@ export const createPracticeSessionRepository = ({ prisma }) => {
         if (used >= max) return { conflict: "limit", closedId };
         return { session: await rows.create({ data: { interviewId, language } }), closedId };
       }),
-
-    findActive: (interviewId) => sessions.findFirst({ where: { interviewId, status: "active" } }),
-
-    countSince: (interviewId, since) => sessions.count({ where: { interviewId, startedAt: { gte: since } } }),
 
     // What the interviewer may see: dates and status only, never code, messages or report.
     listForInterview: (interviewId) =>

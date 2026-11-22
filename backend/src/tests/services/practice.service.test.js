@@ -27,8 +27,6 @@ beforeEach(() => {
   repo = {
     startExclusive: vi.fn(async ({ interviewId, language }) => ({ session: { ...active(0), interviewId, language }, closedId: null })),
     findById: vi.fn(async () => active()),
-    findActive: vi.fn(async () => null),
-    countSince: vi.fn(async () => 0),
     claimMessage: vi.fn(async () => true),
     finish: vi.fn(async () => true),
     saveReport: vi.fn(async () => {}),
@@ -145,7 +143,7 @@ describe("practice service — messages", () => {
 
   it("closes the session even if the candidate disconnects right after end_session", async () => {
     interviewer.streamTurn.mockImplementation(async function* () {
-      yield { type: "tool", name: "end_session" };
+      yield { type: "tool", name: "whatever_ends_it", endsSession: true };
       throw Object.assign(new Error("aborted"), { name: "AbortError" });
     });
     await expect(drain(await send())).rejects.toThrow("aborted");

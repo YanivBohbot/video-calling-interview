@@ -5,7 +5,10 @@ session: it picks a problem, writes its own statement, reads and runs the candid
 gives graduated hints and decides when the session is over.
 
 - `index.js` — the only entry point: `createPracticeInterviewer({ model, fallbackModel, runCode, languages, searchProblems, checkpointer, log })` → `{ streamTurn, history }`.
-- `agent.js` — the agent, its runtime context (`sessionId, role, interviewType, code, language`, never checkpointed) and the stream → events mapping.
+- `agent.js` — the agent (`createAgent`), its runtime context (`sessionId, role, interviewType, code, language`, never checkpointed), `streamTurn` and `history`.
+- `events.js` — the agent's stream → `token` / `tool` (`endsSession` when it was `end_session`) / `done` events.
+- `repair.js` — answers tool calls left unanswered by an aborted turn, before the next one.
+- `messages.js` — helpers over LangChain messages (thread id, text, tool calls).
 - `prompts.js` — the system prompt, built per call by `dynamicSystemPromptMiddleware`.
 
 Tools (shared, `agents/tools/`): `find_problem` (LeetCode titles and links only), `read_candidate_code`,

@@ -69,13 +69,14 @@ export const createPracticeCoach = ({ model, fallbackModel, runCode, languages, 
     if (!report) throw new CoachFailedError();
     // Honest report: keep only tests backed by a real run of the candidate's code (one test
     // per run), show what it really printed, and decide `passed` from that output.
+    const testsRun = [];
     const cited = new Set();
-    const testsRun = report.testsRun
-      .filter((test) => runs.has(test.runId) && !cited.has(test.runId) && cited.add(test.runId))
-      .map((test) => {
-        const actual = runs.get(test.runId);
-        return { ...test, actual, passed: sameOutput(actual, test.expected) };
-      });
+    for (const test of report.testsRun) {
+      if (!runs.has(test.runId) || cited.has(test.runId)) continue; // made up, or run already cited
+      cited.add(test.runId);
+      const actual = runs.get(test.runId);
+      testsRun.push({ ...test, actual, passed: sameOutput(actual, test.expected) });
+    }
     return { ...report, testsRun };
   };
 

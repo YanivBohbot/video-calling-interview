@@ -1,6 +1,5 @@
 import { ConflictError, NotFoundError, RateLimitError } from "../shared/errors.js";
-import { rateKeyFor } from "./code.service.js";
-import { END_SESSION_TOOL } from "../agents/practiceInterviewer/index.js";
+import { rateKeyFor } from "../shared/rateKeys.js";
 
 // Spec caps (starting values).
 export const MAX_SESSIONS_PER_LINK = 3;
@@ -131,7 +130,7 @@ export const createPracticeService = ({
       try {
         for await (const event of turn) {
           // Noted at the tool call: the candidate may disconnect during the goodbye.
-          if (event.type === "tool" && event.name === END_SESSION_TOOL) ended = true;
+          if (event.type === "tool" && event.endsSession) ended = true;
           if (event.type === "done" && event.ended) ended = true;
           yield event;
         }
