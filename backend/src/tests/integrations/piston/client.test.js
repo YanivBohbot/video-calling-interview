@@ -28,10 +28,27 @@ describe("Piston client", () => {
   });
 
   it("flags a run killed by Piston's time limit", async () => {
-    const fetch = fakeFetch(200, run({ code: null, signal: "SIGKILL" }));
+    const fetch = fakeFetch(200, run({ code: null, signal: "SIGKILL", status: "TO" }));
     expect(
       await createPistonClient({ baseUrl: "http://p", fetch }).runCode({ language: "python", code: "while True: pass" }),
     ).toMatchObject({ timedOut: true });
+  });
+
+  it("reports an output flood cut by Piston as truncated, not as a timeout", async () => {
+    // Piston kills a run whose output exceeds its limit with SIGKILL too, but status "OL"/"EL".
+    const fetch = fakeFetch(200, run({ stdout: "1 2", output: "1 2", code: null, signal: "SIGKILL", status: "OL" }));
+    const result = await createPistonClient({ baseUrl: "http://p", fetch }).runCode({ language: "python", code: "" });
+    expect(result.timedOut).toBe(false);
+    expect(result.output.endsWith("[output truncated]")).toBe(true);
+  });
+
+  it("flags a compile step that timed out", async () => {
+    const fetch = fakeFetch(200, {
+      compile: { stdout: "", stderr: "", output: "", code: null, signal: "SIGKILL", status: "TO" },
+    });
+    expect(await createPistonClient({ baseUrl: "http://p", fetch }).runCode({ language: "java", code: "x" })).toMatchObject({
+      timedOut: true,
+    });
   });
 
   it("truncates output beyond 20000 characters", async () => {

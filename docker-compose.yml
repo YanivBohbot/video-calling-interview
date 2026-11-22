@@ -17,8 +17,12 @@ services:
   piston:
     image: ghcr.io/engineer-man/piston
     privileged: true # Piston sandboxes each run with isolate (cgroups)
+    # Localhost only: Piston has no authentication, anyone reaching it could run code.
     ports:
-      - "2000:2000"
+      - "127.0.0.1:2000:2000"
+    environment:
+      # Piston's own cap is 1024 chars per stream; ours (20000, integrations/piston) applies instead.
+      PISTON_OUTPUT_MAX_SIZE: "65536"
     volumes:
       - piston_packages:/piston/packages
     tmpfs:

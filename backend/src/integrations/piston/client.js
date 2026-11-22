@@ -50,13 +50,22 @@ export const createPistonClient = ({ baseUrl, fetch = globalThis.fetch, timeoutM
     // A failed compile (Java, C++) is the result to show; the run step never happened.
     const step = body?.compile && body.compile.code !== 0 ? body.compile : body?.run;
     if (!step) throw new CodeRunnerUnavailableError("Code runner returned no result");
+    // Piston kills a step with SIGKILL both when it runs too long (status "TO") and when its
+    // stdout/stderr exceed the output limit ("OL" / "EL"); only the status tells them apart.
+    // (No status: an older Piston — fall back to the signal.)
+    const timedOut = step.status ? step.status === "TO" : step.signal === "SIGKILL";
+    const mark = (text, flooded) => {
+      const capped = cap(text);
+      return flooded && !capped.endsWith(TRUNCATED) ? capped + TRUNCATED : capped;
+    };
+    const stdoutFlooded = step.status === "OL";
+    const stderrFlooded = step.status === "EL";
     return {
-      output: cap(step.output),
-      stdout: cap(step.stdout),
-      stderr: cap(step.stderr),
+      output: mark(step.output, stdoutFlooded || stderrFlooded),
+      stdout: mark(step.stdout, stdoutFlooded),
+      stderr: mark(step.stderr, stderrFlooded),
       exitCode: step.code ?? null,
-      // Piston kills runs that exceed its time limit.
-      timedOut: step.signal === "SIGKILL",
+      timedOut,
     };
   };
 
