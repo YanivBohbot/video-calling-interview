@@ -62,7 +62,7 @@ backend/src/
   tests/           http/ (cross-layer HTTP tests: buildTestApp() = real container over a stub prisma + fakes)
                    agents/questionGenerator/ (agent tests, same tree as the agent) · architecture/ (import-rule guards) · helpers/testApp.js
   realtime/        Socket.io: attachRealtime, one handler per event, roomState, roomQuestions, flushScheduler
-  agents/          LangGraph question-generator pipeline
+  agents/          questionGenerator (LangGraph workflow), practiceInterviewer + practiceCoach (createAgent), shared tools/ and middleware/
   integrations/    plain HTTP clients for external services: piston/client.js (runs code), leetcode/client.js (GraphQL search)
   lib/             db.js (prisma singleton), rateLimiter.js, seed.js
 ```
@@ -82,6 +82,7 @@ Every `/api` route (except `GET /health` and `POST /api/auth/demo`) and every So
 | `interviewer` | `Authorization: Bearer <Clerk session token>` (verified with `@clerk/express`, 60 s tokens — the frontend calls `getToken()` per request) | only **their own** interviews, profile (`/api/users/me`), AI generation (10/h) |
 | `demo` | `Authorization: Bearer <demo token>` from `POST /api/auth/demo` (HS256, 8 h, `DEMO_TOKEN_SECRET`) | same as an interviewer on the shared "demo" account; **cannot delete**; AI 5/h shared by all demo visitors |
 | `candidate` | `x-invite-token: <secret>` from the invite link `/room/<id>#invite=<secret>` (only its SHA-256 is stored in `Interview.inviteTokenHash`) | only `GET /api/interviews/:id/room` (reduced view, never questions/notes), `/api/sessions`, `/api/stream/token`, and that interview's socket room; can't `question-change` |
+| `practice` | `x-practice-token: <secret>` from the AI practice link `/practice/<id>#practice=<secret>` (SHA-256 in `Interview.practiceTokenHash`, valid 7 days) | only `/api/practice/*` of that interview — resolved by `fromPracticeRequest` + `authenticatePractice`, which only `/api/practice` uses; every other route and the sockets ignore the header |
 
 - Not the owner → **404** (ids can't be probed); wrong principal kind → 403 `Forbidden`; no credential → 401.
 - A Clerk user with no `User` row is created on first request from Clerk's profile. `/api/users` list/creation and `/by-clerk/*` no longer exist.
@@ -115,6 +116,19 @@ agents/questionGenerator/       one folder per responsibility (see its README.md
   errors.js
 ```
 
-The agent's tests are not next to its code: they live in `src/tests/agents/questionGenerator/`, in the same folder tree (`graph/workflow.js` → `tests/agents/questionGenerator/graph/workflow.test.js`).
+### AI practice interviewer (candidate training)
+
+The owner creates a practice link (`POST /api/interviews/:id/practice`; `GET` shows only usage dates — never messages, code or report). With it the candidate talks to two independent `createAgent` agents:
+
+```
+agents/practiceInterviewer/   ReAct agent: find_problem → own statement, read_candidate_code, run_code, end_session; streamTurn() → token/tool/done events, history()
+agents/practiceCoach/         ReAct agent with responseFormat = toolStrategy(PracticeReportSchema); the report keeps only tests run_code really ran
+agents/tools/                 shared LangChain tools, one factory per file (clients injected as functions)
+agents/middleware/            turnLimits (≤6 model / ≤8 tool calls per turn), createCallBudget (coach: wrap hooks — built-in limit middlewares break the structured-output retry in langchain 1.5), withFallback, content-free logging
+```
+
+`/api/practice`: `POST /sessions`, `GET /sessions/:sid`, `POST /sessions/:sid/messages` (SSE: `token`, `tool`, `done`, `error`; refusals are JSON before the stream; a client disconnect aborts the turn), `POST /sessions/:sid/finish` (report written in the background), `POST /run`. Caps (`services/practice.service.js`): 3 sessions per link, 60 min and 60 messages per session (atomic counter), 10 messages/min and 30 runs/min per link. Sessions are in table `ai_practice_sessions` (not `practice_sessions`: that one belongs to an unrelated older branch); the conversation is in the shared PostgresSaver, thread `practice:<sessionId>`. Agent tests use LangChain's `fakeModel()` — no key.
+
+The agents' tests are not next to their code: they live in `src/tests/agents/questionGenerator/`, in the same folder tree (`graph/workflow.js` → `tests/agents/questionGenerator/graph/workflow.test.js`).
 
 `container.js` compiles `workflow` with the checkpointer and builds its runtime context, lazily (`container.ai.setup` is called by `server.js`); agents never import Prisma, `src/integrations/` or read `process.env`. Models are full LangChain `provider:model` strings: `AI_MODEL` (default `openai:gpt-4o-mini`) and `AI_MODEL_FALLBACK` (default `openai:gpt-4o`); a bare name means OpenAI. Audit and rationale: `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.

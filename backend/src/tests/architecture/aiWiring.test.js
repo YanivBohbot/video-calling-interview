@@ -42,20 +42,51 @@ describe("AI wiring", () => {
     }
   });
 
-  it("the rest of the backend reaches the agent only through its index.js", async () => {
+  // Every .js file outside agents/ and the agents' own tests (tests/agents/ may reach internals).
+  const backendFilesOutsideAgents = async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
     const src = path.resolve(import.meta.dirname, "../..");
-    const files = fs
+    return fs
       .readdirSync(src, { recursive: true })
-      // The agent's own tests (tests/agents/) may reach its internals.
       .map((f) => f.split(path.sep).join("/"))
-      .filter((f) => f.endsWith(".js") && !f.startsWith("agents/") && !f.startsWith("tests/agents/"));
-    for (const f of files) {
-      const code = fs.readFileSync(path.join(src, f), "utf8");
-      for (const [, target] of code.matchAll(new RegExp('from "([^"]*agents/questionGenerator[^"]*)"', "g"))) {
-        expect(target, f).toMatch(new RegExp("agents/questionGenerator/index[.]js$"));
+      .filter((f) => f.endsWith(".js") && !f.startsWith("agents/") && !f.startsWith("tests/agents/"))
+      .map((f) => ({ f, code: fs.readFileSync(path.join(src, f), "utf8") }));
+  };
+
+  it.each(["questionGenerator", "practiceInterviewer", "practiceCoach"])(
+    "the rest of the backend reaches %s only through its index.js",
+    async (agent) => {
+      for (const { f, code } of await backendFilesOutsideAgents()) {
+        for (const [, target] of code.matchAll(new RegExp(`from "([^"]*agents/${agent}[^"]*)"`, "g"))) {
+          expect(target, f).toMatch(new RegExp(`agents/${agent}/index[.]js$`));
+        }
       }
+    },
+  );
+
+  it("shared tools and middleware are used by agents only", async () => {
+    for (const { f, code } of await backendFilesOutsideAgents()) {
+      expect(code, f).not.toMatch(/from "[^"]*agents\/(tools|middleware)\//);
+    }
+  });
+
+  it("each tool file defines one tool whose schema fields all have a .describe()", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const dir = path.resolve(import.meta.dirname, "../../agents/tools");
+    const files = fs
+      .readdirSync(dir, { recursive: true })
+      .map((f) => f.split(path.sep).join("/"))
+      .filter((f) => f.endsWith(".js") && f !== "index.js");
+    expect(files.length).toBeGreaterThanOrEqual(4);
+    for (const f of files) {
+      const code = fs.readFileSync(path.join(dir, f), "utf8");
+      // The `tool(` call itself, not createRunCodeTool( and the like.
+      expect(code.match(/(?<![\w.])tool\(/g)?.length, f).toBe(1);
+      const fields = code.match(/^\s+(?!schema:)\w+: z\./gm)?.length ?? 0;
+      const described = code.match(/\.describe\(/g)?.length ?? 0;
+      expect(described, f).toBeGreaterThanOrEqual(fields);
     }
   });
 });
