@@ -57,6 +57,13 @@ describe("POST /api/code/run", () => {
     expect((await run(candidateOf("iv-1"), { language: "python", code: "" })).status).toBe(200);
   });
 
+  it("gives each practice link its own budget (not one shared bucket)", async () => {
+    const practiceOf = (interviewId) => ({ kind: "practice", interviewId });
+    for (let i = 0; i < 30; i++) expect((await run(practiceOf("iv-1"), { language: "python", code: "" })).status).toBe(200);
+    expect((await run(practiceOf("iv-1"), { language: "python", code: "" })).status).toBe(429);
+    expect((await run(practiceOf("iv-2"), { language: "python", code: "" })).status).toBe(200);
+  });
+
   it("needs a credential", async () => {
     expect((await run(null, { language: "python", code: "" })).status).toBe(401);
   });

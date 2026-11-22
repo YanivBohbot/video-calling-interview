@@ -24,7 +24,7 @@ beforeEach(() => {
     createFromClerk: vi.fn(async (data) => ({ id: "u-new", ...data })),
     upsertDemoUser: vi.fn(async () => ({ id: "u-demo", clerkId: "demo" })),
   };
-  interviewRepository = { findByInviteHash: vi.fn(async () => null) };
+  interviewRepository = { findByInviteHash: vi.fn(async () => null), findByPracticeHash: vi.fn(async () => null) };
   demoTokens = createDemoTokens({ secret: SECRET });
   resolver = createIdentityResolver({ clerkVerifier, demoTokens, userRepository, interviewRepository });
 });
@@ -33,6 +33,44 @@ const headers = (h) => {
   const lower = Object.fromEntries(Object.entries(h).map(([k, v]) => [k.toLowerCase(), v]));
   return { header: (name) => lower[name.toLowerCase()] };
 };
+
+describe("practice links", () => {
+  const NOW = Date.parse("2026-11-22T12:00:00Z");
+  const DAY = 24 * 60 * 60 * 1000;
+  const practiceResolver = () =>
+    createIdentityResolver({ clerkVerifier, demoTokens, userRepository, interviewRepository, now: () => NOW });
+
+  it("resolves a valid practice token to a practice principal for that interview", async () => {
+    interviewRepository.findByPracticeHash.mockResolvedValue({ id: "iv-1", status: "scheduled", practiceCreatedAt: new Date(NOW - DAY) });
+    expect(await practiceResolver().fromPracticeRequest(headers({ "x-practice-token": "s3cret" }))).toEqual({
+      kind: "practice",
+      interviewId: "iv-1",
+    });
+    expect(interviewRepository.findByPracticeHash).toHaveBeenCalledWith(hashInviteSecret("s3cret"));
+  });
+
+  it("refuses a link older than 7 days", async () => {
+    interviewRepository.findByPracticeHash.mockResolvedValue({ id: "iv-1", status: "scheduled", practiceCreatedAt: new Date(NOW - 7 * DAY - 1) });
+    expect(await practiceResolver().fromPracticeRequest(headers({ "x-practice-token": "s3cret" }))).toBeNull();
+  });
+
+  it.each(["completed", "cancelled"])("refuses a link once the interview is %s", async (status) => {
+    interviewRepository.findByPracticeHash.mockResolvedValue({ id: "iv-1", status, practiceCreatedAt: new Date(NOW) });
+    expect(await practiceResolver().fromPracticeRequest(headers({ "x-practice-token": "s3cret" }))).toBeNull();
+  });
+
+  it("returns null without the header", async () => {
+    expect(await practiceResolver().fromPracticeRequest(headers({ Authorization: "Bearer clerk:clerk_ada" }))).toBeNull();
+    expect(interviewRepository.findByPracticeHash).not.toHaveBeenCalled();
+  });
+
+  it("the generic resolver (every other route, sockets) ignores practice tokens", async () => {
+    interviewRepository.findByPracticeHash.mockResolvedValue({ id: "iv-1", status: "scheduled", practiceCreatedAt: new Date(NOW) });
+    expect(await practiceResolver().fromRequest(headers({ "x-practice-token": "s3cret" }))).toBeNull();
+    expect(await practiceResolver().fromCredentials({ practice: "s3cret" })).toBeNull();
+    expect(interviewRepository.findByPracticeHash).not.toHaveBeenCalled();
+  });
+});
 
 describe("identity resolver", () => {
   it("resolves a valid demo token to the demo principal", async () => {

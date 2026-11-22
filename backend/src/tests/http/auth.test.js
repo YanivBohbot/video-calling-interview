@@ -67,3 +67,15 @@ describe("authentication on /api", () => {
     expect((await request(app).get("/health")).status).toBe(200);
   });
 });
+
+describe("practice links stay on /api/practice", () => {
+  it("a valid practice token opens no other route", async () => {
+    // Even if the hash matched an interview, the generic resolver never reads x-practice-token.
+    prisma.interview.findUnique.mockResolvedValue({ id: "iv-1", status: "scheduled", practiceCreatedAt: new Date() });
+    const asPractice = { "x-practice-token": "s3cret" };
+    expect((await request(app).get("/api/sessions").set(asPractice)).status).toBe(401);
+    expect((await request(app).get("/api/stream/token").set(asPractice)).status).toBe(401);
+    expect((await request(app).get("/api/interviews/iv-1/room").set(asPractice)).status).toBe(401);
+    expect((await request(app).post("/api/code/run").set(asPractice).send({ language: "python", code: "" })).status).toBe(401);
+  });
+});

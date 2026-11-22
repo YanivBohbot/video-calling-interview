@@ -1,12 +1,22 @@
-import { CANDIDATE, DEMO, INTERVIEWER } from "./principal.js";
+import { CANDIDATE, DEMO, INTERVIEWER, PRACTICE } from "./principal.js";
 import { hashInviteSecret } from "./inviteSecrets.js";
 import { ConflictError } from "../shared/errors.js";
 
 const CLOSED_STATUSES = new Set(["completed", "cancelled"]);
+export const PRACTICE_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Turns credentials into a principal (see principal.js), or null when there is none.
 // Order: bearer → demo token (local check) → Clerk session; otherwise invite secret.
-export const createIdentityResolver = ({ clerkVerifier, demoTokens, userRepository, interviewRepository }) => {
+// Practice links are resolved by fromPracticeRequest only, which app.js mounts on
+// /api/practice alone: fromRequest / fromCredentials (every other route, and sockets)
+// never read x-practice-token, so a practice link can't open anything else.
+export const createIdentityResolver = ({
+  clerkVerifier,
+  demoTokens,
+  userRepository,
+  interviewRepository,
+  now = () => Date.now(),
+}) => {
   // Looked up on every demo request (one indexed upsert): caching the id would go stale
   // when the database is reseeded while the server runs.
   const demoPrincipal = async () => {
@@ -50,6 +60,15 @@ export const createIdentityResolver = ({ clerkVerifier, demoTokens, userReposito
     return { kind: CANDIDATE, interviewId: interview.id };
   };
 
+  const fromPracticeRequest = async (req) => {
+    const secret = req.header("x-practice-token");
+    if (!secret) return null;
+    const interview = await interviewRepository.findByPracticeHash(hashInviteSecret(secret));
+    if (!interview || CLOSED_STATUSES.has(interview.status) || !interview.practiceCreatedAt) return null;
+    if (now() - new Date(interview.practiceCreatedAt).getTime() > PRACTICE_LINK_TTL_MS) return null;
+    return { kind: PRACTICE, interviewId: interview.id };
+  };
+
   const fromCredentials = async ({ bearer, invite } = {}) => {
     if (bearer) {
       if (await demoTokens.verify(bearer)) return demoPrincipal();
@@ -67,5 +86,5 @@ export const createIdentityResolver = ({ clerkVerifier, demoTokens, userReposito
     return fromCredentials({ bearer, invite });
   };
 
-  return { fromCredentials, fromRequest };
+  return { fromCredentials, fromRequest, fromPracticeRequest };
 };

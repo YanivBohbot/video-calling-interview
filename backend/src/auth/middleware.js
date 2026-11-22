@@ -1,9 +1,8 @@
 import { AppError, InternalError, UnauthorizedError } from "../shared/errors.js";
 
-// Resolves the caller and sets `req.principal`, or answers 401.
-export const authenticate = (resolver) => async (req, res, next) => {
+const authenticateWith = (resolve) => async (req, res, next) => {
   try {
-    const principal = await resolver.fromRequest(req);
+    const principal = await resolve(req);
     if (!principal) return next(new UnauthorizedError("Unauthorized"));
     req.principal = principal;
     return next();
@@ -11,6 +10,12 @@ export const authenticate = (resolver) => async (req, res, next) => {
     return next(err instanceof AppError ? err : new InternalError("Auth error", { cause: err }));
   }
 };
+
+// Resolves the caller and sets `req.principal`, or answers 401.
+export const authenticate = (resolver) => authenticateWith((req) => resolver.fromRequest(req));
+
+// /api/practice only: the practice link (x-practice-token) is the one accepted credential.
+export const authenticatePractice = (resolver) => authenticateWith((req) => resolver.fromPracticeRequest(req));
 
 // Lets only the given principal kinds through (e.g. requireKind("interviewer", "demo")).
 export const requireKind =
