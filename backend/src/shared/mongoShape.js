@@ -15,9 +15,9 @@ export const toUserDoc = (user) => {
 
 export const toInterviewDoc = (iv) => {
   if (!iv) return null;
-  // The link hashes never leave the server, not even to the owner.
+  // The invite hash never leaves the server, not even to the owner.
   // eslint-disable-next-line no-unused-vars
-  const { id, interviewer, interviewerId, inviteTokenHash, practiceTokenHash, ...rest } = iv;
+  const { id, interviewer, interviewerId, inviteTokenHash, ...rest } = iv;
   const doc = { _id: id, ...rest };
   if (interviewer) {
     doc.interviewerId = {

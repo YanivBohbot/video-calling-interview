@@ -42,9 +42,7 @@ model Interview {
   // SHA-256 of the candidate invite secret (the secret itself is never stored).
   inviteTokenHash String?   @unique
   inviteCreatedAt DateTime?
-  // SHA-256 of the practice link secret (the AI practice interviewer, candidate-only).
-  practiceTokenHash String?   @unique
-  practiceCreatedAt DateTime?
+  // Sessions with the AI interviewer of the room.
   practiceSessions  AiPracticeSession[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

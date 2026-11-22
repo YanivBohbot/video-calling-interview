@@ -1,4 +1,4 @@
-import { AppError, NotFoundError, RateLimitError, ValidationError } from "../shared/errors.js";
+import { AppError, NotFoundError, ValidationError } from "../shared/errors.js";
 import { averageDuration } from "../shared/stats.js";
 import { validateQuestionsPayload } from "../validators/question.validation.js";
 import { generateInviteSecret } from "../auth/inviteSecrets.js";
@@ -15,14 +15,7 @@ const assertStatus = (status) => {
 
 // Every method takes the caller (principal) first. Interviewers and the demo visitor
 // only ever see their own interviews: anything else is "not found", so ids can't be probed.
-// `demoPracticeLimiter`: the demo is public, and each practice link opens 3 AI sessions —
-// links made in demo mode share one small budget.
-export const createInterviewService = ({
-  interviewRepository,
-  practiceSessionRepository,
-  demoPracticeLimiter = { check: () => ({ ok: true }) },
-  clientUrl,
-}) => {
+export const createInterviewService = ({ interviewRepository, clientUrl }) => {
   const notFound = () => new NotFoundError("Interview not found");
 
   const isOwner = (principal, interview) => !!interview && interview.interviewerId === principal.userId;
@@ -118,30 +111,6 @@ export const createInterviewService = ({
     return { url: `${clientUrl}/room/${encodeURIComponent(id)}#invite=${secret}` };
   };
 
-  // New AI practice link (candidate-only); replaces any previous one. Only the hash is stored.
-  const createPracticeLink = async (principal, id) => {
-    await assertOwned(principal, id);
-    if (principal.kind === DEMO) {
-      const gate = demoPracticeLimiter.check("demo");
-      if (!gate.ok) throw new RateLimitError("Too many practice links in demo mode, try again later", gate.retryAfter);
-    }
-    const { secret, hash } = generateInviteSecret();
-    await interviewRepository.setPracticeHash(id, hash);
-    return { url: `${clientUrl}/practice/${encodeURIComponent(id)}#practice=${secret}` };
-  };
-
-  // What the interviewer may know about practice: when the link was made and when it was
-  // used. Never the messages, the code or the report (those are the candidate's).
-  const practiceUsage = async (principal, id) => {
-    const interview = await interviewRepository.findById(id);
-    if (!isOwner(principal, interview)) throw notFound();
-    const sessions = await practiceSessionRepository.listForInterview(id);
-    return {
-      createdAt: interview.practiceCreatedAt ?? null,
-      sessions: sessions.map(({ status, startedAt, finishedAt }) => ({ status, startedAt, finishedAt })),
-    };
-  };
-
   // The room page: owners get the full interview, the invited candidate a reduced view.
   const roomView = async (principal, id) => {
     if (principal.kind === CANDIDATE) {
@@ -163,8 +132,6 @@ export const createInterviewService = ({
     dashboardStats,
     recentActivity,
     createInvite,
-    createPracticeLink,
-    practiceUsage,
     roomView,
   };
 };

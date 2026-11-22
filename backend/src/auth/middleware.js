@@ -14,9 +14,6 @@ const authenticateWith = (resolve) => async (req, res, next) => {
 // Resolves the caller and sets `req.principal`, or answers 401.
 export const authenticate = (resolver) => authenticateWith((req) => resolver.fromRequest(req));
 
-// /api/practice only: the practice link (x-practice-token) is the one accepted credential.
-export const authenticatePractice = (resolver) => authenticateWith((req) => resolver.fromPracticeRequest(req));
-
 // Lets only the given principal kinds through (e.g. requireKind("interviewer", "demo")).
 export const requireKind =
   (...kinds) =>

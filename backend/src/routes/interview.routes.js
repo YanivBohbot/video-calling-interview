@@ -17,8 +17,6 @@ export const createInterviewRouter = ({ interviewController }) => {
   router.get("/", owners, interviewController.list);
   router.post("/", owners, validate({ body: createInterviewBody }), interviewController.create);
   router.post("/:id/invite", owners, interviewController.invite);
-  router.post("/:id/practice", owners, interviewController.practiceLink);
-  router.get("/:id/practice", owners, interviewController.practiceUsage);
   router.get("/:id", owners, interviewController.get);
   router.patch("/:id/status", owners, validate({ body: updateStatusBody }), interviewController.updateStatus);
   router.patch("/:id", owners, validate({ body: updateInterviewBody }), interviewController.update);
