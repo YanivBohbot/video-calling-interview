@@ -21,6 +21,8 @@ interface CodeEditorProps {
   apiFetch: ApiFetch;
   // Interviewer only: opens the AI question generator (InterviewRoom owns it).
   onManageQuestions?: () => void;
+  // Sees the editor's content whenever it changes (local edit, remote update, language).
+  onCodeChange?: (code: string, language: string) => void;
 }
 
 const LeetCodeBadge: React.FC<{ source: NonNullable<Question['source']> }> = ({ source }) => (
@@ -35,7 +37,7 @@ const LeetCodeBadge: React.FC<{ source: NonNullable<Question['source']> }> = ({ 
   </a>
 );
 
-const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth, apiFetch, onManageQuestions }) => {
+const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth, apiFetch, onManageQuestions, onCodeChange }) => {
   const [code, setCode] = useState<string>(
     initialCode ?? '// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();',
   );
@@ -72,6 +74,10 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
       socketRef.current?.disconnect();
     };
   }, [roomId, socketAuth]);
+
+  useEffect(() => {
+    onCodeChange?.(code, language);
+  }, [code, language, onCodeChange]);
 
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {

@@ -9,10 +9,11 @@ import {
   type Call,
 } from '@stream-io/video-react-sdk';
 import { useParams } from 'react-router-dom';
-import { Video, Code, PenTool, Link2Off, LogOut } from 'lucide-react';
+import { Video, Code, PenTool, Link2Off, LogOut, Bot } from 'lucide-react';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import Whiteboard from '../components/Whiteboard';
+import { AiInterviewerPanel } from '../components/ai/AiInterviewerPanel';
 import { useApi } from '../lib/api';
 import { readInvite, storeInvite } from '../lib/storage';
 
@@ -62,6 +63,15 @@ export const CandidateRoom: React.FC = () => {
   const [client, setClient] = React.useState<StreamVideoClient | null>(null);
   const [call, setCall] = React.useState<Call | null>(null);
   const [activeTab, setActiveTab] = React.useState<'code' | 'design'>('code');
+  const [showAi, setShowAi] = React.useState(false);
+  // Mounted on first open, then kept (hiding it must not cut an answer being written).
+  const [aiOpened, setAiOpened] = React.useState(false);
+  // The shared editor's latest content, read by the AI panel when the candidate writes.
+  const codeRef = React.useRef({ code: '', language: 'javascript' });
+  const onCodeChange = React.useCallback((code: string, language: string) => {
+    codeRef.current = { code, language };
+  }, []);
+  const getCode = React.useCallback(() => codeRef.current, []);
 
   React.useEffect(() => {
     if (!invite) return;
@@ -186,18 +196,39 @@ export const CandidateRoom: React.FC = () => {
                     <PenTool size={16} />
                     System Design
                   </button>
+                  <button
+                    onClick={() => {
+                      setShowAi((open) => !open);
+                      setAiOpened(true);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      showAi ? 'bg-violet-500/20 text-violet-200' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                    title={showAi ? 'Hide the AI interviewer' : 'Show the AI interviewer'}
+                  >
+                    <Bot size={16} />
+                    AI interviewer
+                  </button>
                 </div>
-                <div className="flex-1 rounded-2xl overflow-hidden border border-white/5 shadow-inner">
-                  {activeTab === 'code' ? (
-                    <CollaborativeEditor
-                      roomId={id}
-                      initialCode={room.codeSnapshot ?? undefined}
-                      initialLanguage={room.codeLanguage ?? undefined}
-                      socketAuth={socketAuth}
-                      apiFetch={apiFetch}
-                    />
-                  ) : (
-                    <Whiteboard />
+                <div className="flex-1 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex">
+                  <div className="flex-1 min-w-0">
+                    {activeTab === 'code' ? (
+                      <CollaborativeEditor
+                        roomId={id}
+                        initialCode={room.codeSnapshot ?? undefined}
+                        initialLanguage={room.codeLanguage ?? undefined}
+                        socketAuth={socketAuth}
+                        apiFetch={apiFetch}
+                        onCodeChange={onCodeChange}
+                      />
+                    ) : (
+                      <Whiteboard />
+                    )}
+                  </div>
+                  {aiOpened && (
+                    <div className={showAi ? 'w-[24rem] shrink-0 border-l border-white/5' : 'hidden'}>
+                      <AiInterviewerPanel apiFetch={apiFetch} interviewId={id} role="candidate" getCode={getCode} />
+                    </div>
                   )}
                 </div>
               </div>
