@@ -21,12 +21,14 @@ import { createUserService } from "./services/user.service.js";
 import { createInterviewService } from "./services/interview.service.js";
 import { createQuestionService } from "./services/question.service.js";
 import { createStreamService } from "./services/stream.service.js";
+import { createCodeService } from "./services/code.service.js";
 
 import { createSessionController } from "./controllers/session.controller.js";
 import { createUserController } from "./controllers/user.controller.js";
 import { createInterviewController } from "./controllers/interview.controller.js";
 import { createQuestionController } from "./controllers/question.controller.js";
 import { createStreamController } from "./controllers/stream.controller.js";
+import { createCodeController } from "./controllers/code.controller.js";
 import { createAuthController } from "./controllers/auth.controller.js";
 
 import { createSessionRouter } from "./routes/session.routes.js";
@@ -34,19 +36,24 @@ import { createUserRouter } from "./routes/user.routes.js";
 import { createInterviewRouter } from "./routes/interview.routes.js";
 import { createQuestionRouter } from "./routes/question.routes.js";
 import { createStreamRouter } from "./routes/stream.routes.js";
+import { createCodeRouter } from "./routes/code.routes.js";
+import { createPistonClient } from "./integrations/piston/client.js";
 import { createAuthRouter } from "./routes/auth.routes.js";
 
 const AI_GENERATIONS_PER_HOUR = 10;
 // Shared by every demo visitor (the demo is public).
 const DEMO_AI_GENERATIONS_PER_HOUR = 5;
 const ONE_HOUR_MS = 60 * 60 * 1000;
+// Run button: per caller (see services/code.service.js).
+const CODE_RUNS_PER_MINUTE = 30;
+const ONE_MINUTE_MS = 60 * 1000;
 
 // Composition root: the only place that knows which implementation backs each
 // dependency, and the only place the layers are wired together:
 //   repositories (Prisma) → services (business rules) → controllers (HTTP) → routes
 //
 // The optional parameters let tests swap an external dependency for a fake
-// (AI pipeline, Clerk, Stream client, clock) while keeping everything else real.
+// (AI pipeline, Clerk, Stream client, code runner, clock) while keeping everything else real.
 // `ai.createMcpClient` replaces the LeetCode MCP client (tests).
 // `identityResolver` replaces the whole credential check — HTTP tests use it to act as a
 // given principal without minting real tokens (the real resolver has its own tests).
@@ -58,6 +65,7 @@ export const createContainer = ({
   clerkVerifier,
   identityResolver,
   getStreamClient,
+  codeRunner,
   now,
 }) => {
   // ── Repositories ──────────────────────────────────────────────────────────
@@ -136,6 +144,10 @@ export const createContainer = ({
         (() => (streamClient ??= new StreamClient(config.stream?.apiKey, config.stream?.apiSecret))),
       now,
     }),
+    code: createCodeService({
+      codeRunner: codeRunner ?? createPistonClient({ baseUrl: config.pistonUrl }),
+      rateLimiter: createRateLimiter({ max: CODE_RUNS_PER_MINUTE, windowMs: ONE_MINUTE_MS }),
+    }),
   };
 
   // ── Controllers ───────────────────────────────────────────────────────────
@@ -145,6 +157,7 @@ export const createContainer = ({
     interview: createInterviewController({ interviewService: services.interview }),
     question: createQuestionController({ questionService: services.question }),
     stream: createStreamController({ streamService: services.stream }),
+    code: createCodeController({ codeService: services.code }),
     auth: createAuthController({ demoTokens }),
   };
 
@@ -156,6 +169,7 @@ export const createContainer = ({
     users: createUserRouter({ userController: controllers.user }),
     sessions: createSessionRouter({ sessionController: controllers.session }),
     stream: createStreamRouter({ streamController: controllers.stream }),
+    code: createCodeRouter({ codeController: controllers.code }),
   };
 
   return { config, prisma, auth, ai, repositories, services, controllers, routers };

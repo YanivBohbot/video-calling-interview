@@ -13,6 +13,7 @@ const MOUNTS = [
   ["users", "/api/users"],
   ["sessions", "/api/sessions"],
   ["stream", "/api/stream"],
+  ["code", "/api/code"],
 ];
 
 // Per client IP, across all /api routes. The AI routes keep their own, stricter limiter.
