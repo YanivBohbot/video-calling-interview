@@ -39,11 +39,11 @@ describe("practiceSession repository", () => {
   });
 });
 
-describe("practiceSession repository — findActive", () => {
-  it("returns the interview's active session", async () => {
+describe("practiceSession repository — findLatest", () => {
+  it("returns the interview's most recent session, active or finished", async () => {
     const findFirst = vi.fn().mockResolvedValue({ id: "s1" });
-    expect(await repoWith({ findFirst }).findActive("iv-1")).toEqual({ id: "s1" });
-    expect(findFirst).toHaveBeenCalledWith({ where: { interviewId: "iv-1", status: "active" } });
+    expect(await repoWith({ findFirst }).findLatest("iv-1")).toEqual({ id: "s1" });
+    expect(findFirst).toHaveBeenCalledWith({ where: { interviewId: "iv-1" }, orderBy: { startedAt: "desc" } });
   });
 });
 

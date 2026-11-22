@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { addCandidateMessage, applyTurnEvent, type ChatState } from './aiChat';
+import { addCandidateMessage, applyTurnEvent, sameMessages, type ChatState } from './aiChat';
+
+describe('sameMessages', () => {
+  it('tells an unchanged history from a new one (so a poll does not re-render the chat)', () => {
+    const a = [{ role: 'candidate' as const, text: 'hi' }, { role: 'interviewer' as const, text: 'Hello' }];
+    expect(sameMessages(a, a.map((m) => ({ ...m })))).toBe(true);
+    expect(sameMessages(a, [...a, { role: 'candidate', text: 'more' }])).toBe(false);
+    expect(sameMessages(a, [a[0], { role: 'interviewer', text: 'Hello!' }])).toBe(false);
+  });
+});
 
 const empty: ChatState = { messages: [], open: false };
 

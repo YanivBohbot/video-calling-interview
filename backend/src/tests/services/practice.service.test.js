@@ -30,7 +30,7 @@ beforeEach(() => {
   repo = {
     startExclusive: vi.fn(async ({ interviewId, language }) => ({ session: { ...active(0), interviewId, language }, closedId: null })),
     findById: vi.fn(async () => active()),
-    findActive: vi.fn(async () => null),
+    findLatest: vi.fn(async () => null),
     claimMessage: vi.fn(async () => true),
     finish: vi.fn(async () => true),
     saveReport: vi.fn(async () => {}),
@@ -89,20 +89,26 @@ describe("practice service — access", () => {
 });
 
 describe("practice service — current", () => {
-  it("returns the interview's active session id", async () => {
-    repo.findActive.mockResolvedValue(active(5));
+  it("returns the interview's latest session id", async () => {
+    repo.findLatest.mockResolvedValue(active(5));
     expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: "s1" });
     expect(await service.current(OWNER, "iv-1")).toEqual({ sessionId: "s1" });
-    expect(repo.findActive).toHaveBeenCalledWith("iv-1");
+    expect(repo.findLatest).toHaveBeenCalledWith("iv-1");
   });
 
-  it("closes a session whose time is over and returns null", async () => {
-    repo.findActive.mockResolvedValue(active(61));
-    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: null });
+  it("still returns a finished session, so a reloaded room shows its report", async () => {
+    repo.findLatest.mockResolvedValue(active(5, { status: "finished", report: { summary: "ok" } }));
+    expect(await service.current(OWNER, "iv-1")).toEqual({ sessionId: "s1" });
+    expect(repo.finish).not.toHaveBeenCalled();
+  });
+
+  it("closes a session whose time is over, and still returns it", async () => {
+    repo.findLatest.mockResolvedValue(active(61));
+    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: "s1" });
     expect(repo.finish).toHaveBeenCalledWith("s1");
   });
 
-  it("returns null when no session is active", async () => {
+  it("returns null before any session", async () => {
     expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: null });
   });
 });

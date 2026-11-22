@@ -140,12 +140,12 @@ describe("/api/interviews/:id/ai", () => {
     }
   });
 
-  it("GET /sessions/current answers the interview's active session id", async () => {
-    prisma.aiPracticeSession.findFirst.mockResolvedValue(session());
+  it("GET /sessions/current answers the interview's latest session id", async () => {
+    prisma.aiPracticeSession.findFirst.mockResolvedValue(session({ status: "finished" }));
     const res = await request(app).get(`${AI}/sessions/current`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ sessionId: "s1" });
-    expect(prisma.aiPracticeSession.findFirst).toHaveBeenCalledWith({ where: { interviewId: "iv-1", status: "active" } });
+    expect(prisma.aiPracticeSession.findFirst).toHaveBeenCalledWith({ where: { interviewId: "iv-1" }, orderBy: { startedAt: "desc" } });
   });
 
   it("caps sessions per interview at 3", async () => {

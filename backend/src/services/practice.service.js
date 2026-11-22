@@ -77,15 +77,13 @@ export const createPracticeService = ({
     return result.session;
   };
 
-  // The active session of the interview, so a refreshed room finds it again.
+  // The interview's latest session (active or finished), so a reloaded room finds the
+  // conversation and its report again. An active one past its time is closed on the way.
   const current = async (principal, interviewId) => {
     await loadInterview(principal, interviewId);
-    const session = await sessions.findActive(interviewId);
+    const session = await sessions.findLatest(interviewId);
     if (!session) return { sessionId: null };
-    if (isOver(session)) {
-      await close(session.id);
-      return { sessionId: null };
-    }
+    if (session.status === "active" && isOver(session)) await close(session.id);
     return { sessionId: session.id };
   };
 

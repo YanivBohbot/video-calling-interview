@@ -5,6 +5,10 @@ import type { AiMessage, TurnEvent } from './aiInterviewer';
 // closes it (the model's next words are a new message, as in the saved history).
 export type ChatState = { messages: AiMessage[]; open: boolean };
 
+// Same history? A poll that brings nothing new must not re-render (or re-scroll) the chat.
+export const sameMessages = (a: AiMessage[], b: AiMessage[]) =>
+  a.length === b.length && a.every((m, i) => m.role === b[i].role && m.text === b[i].text);
+
 export const addCandidateMessage = (state: ChatState, text: string): ChatState => ({
   messages: [...state.messages, { role: 'candidate', text }],
   open: false,

@@ -7,7 +7,8 @@ export const createPracticeSessionRepository = ({ prisma }) => {
   return {
     findById: (id) => sessions.findUnique({ where: { id } }),
 
-    findActive: (interviewId) => sessions.findFirst({ where: { interviewId, status: "active" } }),
+    // The interview's most recent session, active or finished (a reloaded room shows it).
+    findLatest: (interviewId) => sessions.findFirst({ where: { interviewId }, orderBy: { startedAt: "desc" } }),
 
     // Starts a session if the link allows it, atomically: a per-interview advisory lock
     // serialises concurrent starts, so N parallel requests can't all see "no active session,
