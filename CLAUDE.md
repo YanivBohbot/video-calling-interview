@@ -32,6 +32,7 @@ cd frontend
 npm run dev
 npm run build     # tsc -b && vite build
 npm run lint      # eslint .
+npm test          # vitest run (pure logic in src/lib: SSE parser, AI client, chat reducer)
 ```
 
 **Database** — Postgres 16 runs in Docker (`docker-compose.yml` at repo root), mapped to host port **6300** (not the default 5432), user/db `talentiq`/`talentiq_secret`.
@@ -117,7 +118,7 @@ agents/questionGenerator/       one folder per responsibility (see its README.md
 
 ### AI interviewer (in the interview room)
 
-A panel of the interview room (no separate link: the invite link opens it). Only the invited candidate starts a session and writes to the AI; the owner follows the conversation (polling) and reads the report, and may end the session. Two independent `createAgent` agents:
+A panel of the interview room (no separate link: the invite link opens it). Only the invited candidate starts a session and writes to the AI; the owner follows the conversation (polling) and reads the report, and may end the session. Frontend: `components/ai/AiInterviewerPanel.tsx` (toggled by "AI interviewer" in both rooms; reads the shared editor through `CollaborativeEditor`'s `onCodeChange`), state in `lib/useAiInterviewer.ts`, HTTP + SSE in `lib/aiInterviewer.ts`. Two independent `createAgent` agents:
 
 ```
 agents/practiceInterviewer/   ReAct agent: find_problem → own statement, read_candidate_code, run_code, end_session; streamTurn() → token/tool/done events, history()
