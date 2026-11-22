@@ -39,6 +39,12 @@ import { createCodeRouter } from "./routes/code.routes.js";
 import { createPistonClient } from "./integrations/piston/client.js";
 import { createLeetCodeClient } from "./integrations/leetcode/client.js";
 import { createAuthRouter } from "./routes/auth.routes.js";
+import { createPracticeService } from "./services/practice.service.js";
+import { createPracticeController } from "./controllers/practice.controller.js";
+import { createPracticeRouter } from "./routes/practice.routes.js";
+import { EDITOR_LANGUAGES } from "./integrations/piston/client.js";
+import { createPracticeInterviewer } from "./agents/practiceInterviewer/index.js";
+import { createPracticeCoach } from "./agents/practiceCoach/index.js";
 
 const AI_GENERATIONS_PER_HOUR = 10;
 // Shared by every demo visitor (the demo is public).
@@ -47,6 +53,8 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 // Run button: per caller (see services/code.service.js).
 const CODE_RUNS_PER_MINUTE = 30;
 const ONE_MINUTE_MS = 60 * 1000;
+// AI practice: messages per practice link.
+const PRACTICE_MESSAGES_PER_MINUTE = 10;
 
 // Composition root: the only place that knows which implementation backs each
 // dependency, and the only place the layers are wired together:
@@ -55,6 +63,7 @@ const ONE_MINUTE_MS = 60 * 1000;
 // The optional parameters let tests swap an external dependency for a fake
 // (AI pipeline, Clerk, Stream client, code runner, clock) while keeping everything else real.
 // `leetcode` replaces the LeetCode GraphQL client (tests).
+// `practiceInterviewer` / `practiceCoach` replace the two practice agents (tests).
 // `identityResolver` replaces the whole credential check — HTTP tests use it to act as a
 // given principal without minting real tokens (the real resolver has its own tests).
 export const createContainer = ({
@@ -66,6 +75,8 @@ export const createContainer = ({
   getStreamClient,
   codeRunner,
   leetcode,
+  practiceInterviewer,
+  practiceCoach,
   now,
 }) => {
   // ── Repositories ──────────────────────────────────────────────────────────
@@ -76,18 +87,27 @@ export const createContainer = ({
     practiceSession: createPracticeSessionRepository({ prisma }),
   };
 
+  // ── External clients ──────────────────────────────────────────────────────
+  const runner = codeRunner ?? createPistonClient({ baseUrl: config.pistonUrl });
+  let leetcodeClient;
+  const getLeetCode = () => (leetcodeClient ??= leetcode ?? createLeetCodeClient());
+
+  // One Postgres checkpointer (one connection pool) for every agent, built on first use.
+  let checkpointer;
+  const getCheckpointer = () => (checkpointer ??= createCheckpointer({ connectionString: config.databaseUrl }));
+
   // ── AI question generator (built on first use: the Postgres checkpointer and
   //    the models are only created when someone generates) ──────────────────
   let aiStack;
   const getAi = () => {
     if (!aiStack) {
       const models = createQuestionModels({ model: config.aiModel, fallbackModel: config.aiModelFallback });
-      const checkpointer = createCheckpointer({ connectionString: config.databaseUrl });
+      const checkpointer = getCheckpointer();
       const graph = workflow.compile({ checkpointer });
       // The graph's runtime context (QuestionGenContext): what the nodes call.
       const context = {
         chooseSearch: models.chooseSearch,
-        searchProblems: (leetcode ?? createLeetCodeClient()).searchProblems,
+        searchProblems: (filters) => getLeetCode().searchProblems(filters),
         draft: models.draft,
         saveQuestions: repositories.interview.saveQuestions,
       };
@@ -99,6 +119,35 @@ export const createContainer = ({
     // Boot: create the checkpointer tables.
     setup: () => getAi().checkpointer.setup(),
   };
+  // ── AI practice agents (built on first use, like the generator) ────────────
+  const agentLog = (entry) => console.info(JSON.stringify(entry));
+  let practiceAgents;
+  const getPracticeAgents = () => {
+    practiceAgents ??= {
+      interviewer:
+        practiceInterviewer ??
+        createPracticeInterviewer({
+          model: config.aiModel,
+          fallbackModel: config.aiModelFallback,
+          runCode: (args) => runner.runCode(args),
+          languages: EDITOR_LANGUAGES,
+          searchProblems: (filters) => getLeetCode().searchProblems(filters),
+          checkpointer: getCheckpointer(),
+          log: agentLog,
+        }),
+      coach:
+        practiceCoach ??
+        createPracticeCoach({
+          model: config.aiModel,
+          fallbackModel: config.aiModelFallback,
+          runCode: (args) => runner.runCode(args),
+          languages: EDITOR_LANGUAGES,
+          log: agentLog,
+        }),
+    };
+    return practiceAgents;
+  };
+
   const questionGeneration = generation ?? {
     start: (args) => getAi().generator.start(args),
     resume: (args) => getAi().generator.resume(args),
@@ -146,10 +195,22 @@ export const createContainer = ({
       now,
     }),
     code: createCodeService({
-      codeRunner: codeRunner ?? createPistonClient({ baseUrl: config.pistonUrl }),
+      codeRunner: runner,
       rateLimiter: createRateLimiter({ max: CODE_RUNS_PER_MINUTE, windowMs: ONE_MINUTE_MS }),
     }),
   };
+  services.practice = createPracticeService({
+    practiceSessionRepository: repositories.practiceSession,
+    interviewRepository: repositories.interview,
+    interviewer: {
+      streamTurn: (args) => getPracticeAgents().interviewer.streamTurn(args),
+      history: (sessionId) => getPracticeAgents().interviewer.history(sessionId),
+    },
+    coach: { review: (args) => getPracticeAgents().coach.review(args) },
+    codeService: services.code,
+    messageLimiter: createRateLimiter({ max: PRACTICE_MESSAGES_PER_MINUTE, windowMs: ONE_MINUTE_MS }),
+    now,
+  });
 
   // ── Controllers ───────────────────────────────────────────────────────────
   const controllers = {
@@ -160,6 +221,7 @@ export const createContainer = ({
     stream: createStreamController({ streamService: services.stream }),
     code: createCodeController({ codeService: services.code }),
     auth: createAuthController({ demoTokens }),
+    practice: createPracticeController({ practiceService: services.practice }),
   };
 
   // ── Routers (mounted by app.js) ───────────────────────────────────────────
@@ -171,6 +233,7 @@ export const createContainer = ({
     sessions: createSessionRouter({ sessionController: controllers.session }),
     stream: createStreamRouter({ streamController: controllers.stream }),
     code: createCodeRouter({ codeController: controllers.code }),
+    practice: createPracticeRouter({ practiceController: controllers.practice }),
   };
 
   return { config, prisma, auth, ai, repositories, services, controllers, routers };

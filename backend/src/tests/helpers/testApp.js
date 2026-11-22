@@ -16,6 +16,7 @@ export const PRINCIPALS = Object.freeze({
   bob: { kind: "interviewer", userId: "u-bob", clerkId: "clerk_bob" },
   demo: { kind: "demo", userId: "u-demo", clerkId: "demo" },
   candidateOf: (interviewId) => ({ kind: "candidate", interviewId }),
+  practiceOf: (interviewId) => ({ kind: "practice", interviewId }),
 });
 
 // Fake Clerk: the bearer "clerk:<clerkId>" verifies to that id; no network.
@@ -29,14 +30,23 @@ export const fakeClerkVerifier = ({ profile = { name: "New User", email: "new@x.
 const TEST_PREFIX = "test-principal:";
 export const authAs = (principal) => ({ Authorization: `Bearer ${TEST_PREFIX}${JSON.stringify(principal)}` });
 
-export const testIdentityResolver = (defaultPrincipal) => ({
-  fromRequest: async (req) => {
+// Like the real resolver, /api/practice only accepts practice principals (and every other
+// route never sees them).
+export const testIdentityResolver = (defaultPrincipal) => {
+  const fromRequest = async (req) => {
     const auth = req.header("authorization") || "";
     if (auth.startsWith(`Bearer ${TEST_PREFIX}`)) return JSON.parse(auth.slice(7 + TEST_PREFIX.length));
     return defaultPrincipal;
-  },
-  fromCredentials: async () => defaultPrincipal,
-});
+  };
+  return {
+    fromRequest,
+    fromCredentials: async () => defaultPrincipal,
+    fromPracticeRequest: async (req) => {
+      const principal = await fromRequest(req);
+      return principal?.kind === "practice" ? principal : null;
+    },
+  };
+};
 
 // The real container (every repository, service, controller and router) over a stub
 // `prisma`, with optional fakes for the external dependencies the container accepts.

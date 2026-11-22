@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { errorHandler, notFoundHandler } from "./shared/errorHandler.js";
-import { authenticate } from "./auth/middleware.js";
+import { authenticate, authenticatePractice } from "./auth/middleware.js";
 
 // Order matters: the question routes live under /api/interviews/:id/questions and must
 // be reached before the interviews router's generic /:id handlers.
@@ -60,6 +60,9 @@ export const createApp = (
     const router = routers[name];
     if (router) app.use(path, authenticated, router);
   }
+
+  // Practice links (x-practice-token) are accepted here and nowhere else.
+  if (routers.practice) app.use("/api/practice", authenticatePractice(auth.resolver), routers.practice);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
