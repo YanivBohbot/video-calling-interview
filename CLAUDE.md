@@ -39,7 +39,7 @@ npm run lint      # eslint .
 docker compose up -d          # postgres + piston
 npm run piston:install        # from backend/, once: installs node, typescript, python, java, gcc into Piston
 ```
-The `piston` service (port 2000, `PISTON_URL`) runs code for the editor's Run button; the public Piston API is whitelist-only since 2026-02-15.
+The `piston` service (port 2000, `PISTON_URL`) runs code for the editor's Run button; the public Piston API is whitelist-only since 2026-02-15. Piston needs cgroup v2: on Docker Desktop for Windows that means `%USERPROFILE%\.wslconfig` with `[wsl2]` / `kernelCommandLine = cgroup_no_v1=all`, then `wsl --shutdown` (otherwise it crash-loops with "Cgroup v2 not found").
 
 ## Architecture
 
