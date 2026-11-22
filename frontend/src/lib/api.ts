@@ -4,6 +4,9 @@ import { API_URL } from './config';
 
 export { API_URL };
 
+/** `fetch` against the backend with the caller's credential (see useApi). */
+export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
+
 type SocketAuthCallback = (data: Record<string, string>) => void;
 
 /**

@@ -194,6 +194,7 @@ export const CandidateRoom: React.FC = () => {
                       initialCode={room.codeSnapshot ?? undefined}
                       initialLanguage={room.codeLanguage ?? undefined}
                       socketAuth={socketAuth}
+                      apiFetch={apiFetch}
                     />
                   ) : (
                     <Whiteboard />

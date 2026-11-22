@@ -4,6 +4,7 @@ import { io, Socket } from 'socket.io-client';
 import { Code, Play, Copy, ExternalLink, ListChecks, Sparkles } from 'lucide-react';
 import type { Question, AskedQuestion } from '../lib/questions';
 import { API_URL } from '../lib/config';
+import type { ApiFetch } from '../lib/api';
 
 type SocketAuth = (cb: (data: Record<string, string>) => void) => void;
 
@@ -16,6 +17,8 @@ interface CodeEditorProps {
   askableQuestions?: Question[];
   // Sends a fresh credential on every (re)connection (see useApi().socketAuth).
   socketAuth: SocketAuth;
+  // Runs code through the backend (POST /api/code/run) with this page's credential.
+  apiFetch: ApiFetch;
   // Interviewer only: opens the AI question generator (InterviewRoom owns it).
   onManageQuestions?: () => void;
 }
@@ -32,7 +35,7 @@ const LeetCodeBadge: React.FC<{ source: NonNullable<Question['source']> }> = ({ 
   </a>
 );
 
-const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth, onManageQuestions }) => {
+const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth, apiFetch, onManageQuestions }) => {
   const [code, setCode] = useState<string>(
     initialCode ?? '// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();',
   );
@@ -98,30 +101,20 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
     setIsConsoleOpen(true);
     setOutput('Running code...');
 
-    // Language mapping for Piston API
-    const languageMap: Record<string, string> = {
-      javascript: 'javascript',
-      typescript: 'typescript',
-      python: 'python3',
-      java: 'java',
-      cpp: 'cpp'
-    };
-
     try {
-      const response = await fetch('https://emkc.org/api/v2/piston/execute', {
+      const response = await apiFetch('/api/code/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language: languageMap[language] || language,
-          version: '*', 
-          files: [{ content: code }]
-        })
+        body: JSON.stringify({ language, code }),
       });
-
-      const data = await response.json();
-      const result = data.run.output || data.run.stderr || 'No output.';
+      const data = await response.json().catch(() => ({}));
+      let result: string;
+      if (response.status === 429) result = `Too many runs — try again in ${data.retryAfter}s`;
+      else if (response.status === 502) result = 'The code runner is unavailable right now.';
+      else if (!response.ok) result = data?.message || 'Error executing code. Please try again.';
+      else result = (data.timedOut ? 'Execution timed out.\n' : '') + (data.output || 'No output.');
       setOutput(result);
-      
+
       // Sync execution result to others in the room
       socketRef.current?.emit('code-execution', { roomId, result });
 

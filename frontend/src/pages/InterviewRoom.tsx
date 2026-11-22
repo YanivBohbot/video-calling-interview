@@ -355,6 +355,7 @@ export const InterviewRoom: React.FC = () => {
                       initialLanguage={interviewData?.codeLanguage ?? undefined}
                       askableQuestions={isInterviewer ? interviewData?.questions ?? [] : undefined}
                       socketAuth={socketAuth}
+                      apiFetch={apiFetch}
                       onManageQuestions={isInterviewer ? () => setShowQuestions(true) : undefined}
                     />
                   ) : (
