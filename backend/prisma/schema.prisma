@@ -42,6 +42,10 @@ model Interview {
   // SHA-256 of the candidate invite secret (the secret itself is never stored).
   inviteTokenHash String?   @unique
   inviteCreatedAt DateTime?
+  // SHA-256 of the practice link secret (the AI practice interviewer, candidate-only).
+  practiceTokenHash String?   @unique
+  practiceCreatedAt DateTime?
+  practiceSessions  AiPracticeSession[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -58,4 +62,23 @@ model Session {
   updatedAt  DateTime @updatedAt
 
   @@map("sessions")
+}
+
+// One practice session with the AI interviewer. The conversation itself lives in the
+// LangGraph checkpointer (thread "practice:<id>"), not here. Not "practice_sessions": that
+// table belongs to an older, unrelated practice feature (branch worktree-ai-avatar-interviewer).
+model AiPracticeSession {
+  id           String    @id @default(cuid())
+  interviewId  String
+  interview    Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  status       String    @default("active")
+  language     String
+  code         String?
+  report       Json?
+  messageCount Int       @default(0)
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([interviewId])
+  @@map("ai_practice_sessions")
 }

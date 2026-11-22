@@ -158,6 +158,16 @@ describe("interviews HTTP contract", () => {
     expect(prisma.interview.findUnique).toHaveBeenCalledWith({ where: { id: "iv1" }, include: WITH_INTERVIEWER });
   });
 
+  it("GET /:id never returns the invite or practice link hashes", async () => {
+    prisma.interview.findUnique.mockResolvedValue({
+      id: "iv1", interviewerId: "u-ada", interviewer: INTERVIEWER, inviteTokenHash: "h1", practiceTokenHash: "h2",
+    });
+    const res = await request(app).get("/api/interviews/iv1");
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty("inviteTokenHash");
+    expect(res.body).not.toHaveProperty("practiceTokenHash");
+  });
+
   it("POST creates with 201 and the nested interviewer", async () => {
     prisma.interview.create.mockResolvedValue({ id: "iv1", interviewerId: "u-ada", interviewer: INTERVIEWER });
     const res = await request(app).post("/api/interviews").send(VALID_BODY);
