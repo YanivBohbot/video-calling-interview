@@ -1,5 +1,6 @@
 import { ConflictError, NotFoundError, RateLimitError } from "../shared/errors.js";
 import { rateKeyFor } from "./code.service.js";
+import { END_SESSION_TOOL } from "../agents/practiceInterviewer/index.js";
 
 // Spec caps (starting values).
 export const MAX_SESSIONS_PER_LINK = 3;
@@ -21,6 +22,10 @@ export const createPracticeService = ({
   runInBackground = (fn) => void fn(),
 }) => {
   const notFound = () => new NotFoundError("Practice session not found");
+  // Sessions with a turn in progress: two turns at once on one checkpointer thread would
+  // both start from the same checkpoint and one exchange would be lost. (Process-local,
+  // like the rate limiters.)
+  const replying = new Set();
   const isOver = (session) => now() - new Date(session.startedAt).getTime() >= SESSION_MS;
 
   const loadOwn = async (principal, sessionId) => {
@@ -49,14 +54,18 @@ export const createPracticeService = ({
   const start = async (principal, { language }) => {
     const interview = await interviewRepository.findById(principal.interviewId);
     if (!interview) throw notFound();
-    const current = await sessions.findActive(principal.interviewId);
-    if (current) {
-      if (!isOver(current)) throw new ConflictError("A practice session is already active");
-      await close(current.id); // abandoned (tab closed): it must not block the next one
-    }
-    const used = await sessions.countSince(principal.interviewId, interview.practiceCreatedAt);
-    if (used >= MAX_SESSIONS_PER_LINK) throw new ConflictError("Practice limit reached");
-    return sessions.create({ interviewId: principal.interviewId, language });
+    const result = await sessions.startExclusive({
+      interviewId: principal.interviewId,
+      language,
+      since: interview.practiceCreatedAt,
+      max: MAX_SESSIONS_PER_LINK,
+      // An active session older than this was abandoned (tab closed): closed, not blocking.
+      staleBefore: new Date(now() - SESSION_MS),
+    });
+    if (result.closedId) runInBackground(() => writeReport(result.closedId));
+    if (result.conflict === "active") throw new ConflictError("A practice session is already active");
+    if (result.conflict === "limit") throw new ConflictError("Practice limit reached");
+    return result.session;
   };
 
   const reportStatusOf = (session) => {
@@ -66,7 +75,11 @@ export const createPracticeService = ({
   };
 
   const get = async (principal, sessionId) => {
-    const session = await loadOwn(principal, sessionId);
+    let session = await loadOwn(principal, sessionId);
+    if (session.status === "active" && isOver(session)) {
+      await close(session.id); // time is up even if the candidate never wrote again
+      session = { ...session, status: "finished" };
+    }
     const reportStatus = reportStatusOf(session);
     return {
       id: session.id,
@@ -89,12 +102,20 @@ export const createPracticeService = ({
       await close(session.id);
       throw new ConflictError("Session time is over");
     }
-    const gate = messageLimiter.check(rateKeyFor(principal));
-    if (!gate.ok) throw new RateLimitError("Too many messages, slow down", gate.retryAfter);
-    if (!(await sessions.claimMessage(session.id, { max: MAX_MESSAGES, code, language }))) {
-      throw new ConflictError("Message limit reached");
+    if (replying.has(session.id)) throw new ConflictError("A reply is still being written");
+    replying.add(session.id);
+    let interview;
+    try {
+      const gate = messageLimiter.check(rateKeyFor(principal));
+      if (!gate.ok) throw new RateLimitError("Too many messages, slow down", gate.retryAfter);
+      if (!(await sessions.claimMessage(session.id, { max: MAX_MESSAGES, code, language }))) {
+        throw new ConflictError("Message limit reached");
+      }
+      interview = await interviewRepository.findById(principal.interviewId);
+    } catch (err) {
+      replying.delete(session.id);
+      throw err;
     }
-    const interview = await interviewRepository.findById(principal.interviewId);
 
     const turn = interviewer.streamTurn({
       sessionId: session.id,
@@ -107,11 +128,17 @@ export const createPracticeService = ({
     });
     return (async function* () {
       let ended = false;
-      for await (const event of turn) {
-        if (event.type === "done") ended = event.ended;
-        yield event;
+      try {
+        for await (const event of turn) {
+          // Noted at the tool call: the candidate may disconnect during the goodbye.
+          if (event.type === "tool" && event.name === END_SESSION_TOOL) ended = true;
+          if (event.type === "done" && event.ended) ended = true;
+          yield event;
+        }
+      } finally {
+        replying.delete(session.id);
+        if (ended) await close(session.id);
       }
-      if (ended) await close(session.id);
     })();
   };
 

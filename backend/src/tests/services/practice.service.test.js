@@ -25,7 +25,7 @@ const drain = async (events) => {
 
 beforeEach(() => {
   repo = {
-    create: vi.fn(async ({ interviewId, language }) => ({ ...active(0), interviewId, language })),
+    startExclusive: vi.fn(async ({ interviewId, language }) => ({ session: { ...active(0), interviewId, language }, closedId: null })),
     findById: vi.fn(async () => active()),
     findActive: vi.fn(async () => null),
     countSince: vi.fn(async () => 0),
@@ -58,32 +58,32 @@ beforeEach(() => {
 const settle = () => Promise.all(background);
 
 describe("practice service — start", () => {
-  it("starts a session for the link's interview", async () => {
+  it("starts a session atomically with the link's caps", async () => {
     const session = await service.start(PRINCIPAL, { language: "python" });
-    expect(repo.create).toHaveBeenCalledWith({ interviewId: "iv-1", language: "python" });
+    expect(repo.startExclusive).toHaveBeenCalledWith({
+      interviewId: "iv-1", language: "python", since: INTERVIEW.practiceCreatedAt, max: 3, staleBefore: new Date(NOW - 60 * MIN),
+    });
     expect(session.id).toBe("s1");
   });
 
   it("refuses while another session is active", async () => {
-    repo.findActive.mockResolvedValue(active(10));
+    repo.startExclusive.mockResolvedValue({ conflict: "active" });
     await expect(service.start(PRINCIPAL, { language: "python" })).rejects.toMatchObject({
       status: 409, message: "A practice session is already active",
     });
   });
 
-  it("closes an abandoned session older than 60 min, reports it, and starts a new one", async () => {
-    repo.findActive.mockResolvedValue(active(61));
+  it("writes the report of an abandoned session the start closed", async () => {
+    repo.startExclusive.mockResolvedValue({ session: active(0, { id: "s2" }), closedId: "s1" });
     await service.start(PRINCIPAL, { language: "python" });
     await settle();
-    expect(repo.finish).toHaveBeenCalledWith("s1");
     expect(coach.review).toHaveBeenCalled();
-    expect(repo.create).toHaveBeenCalled();
+    expect(repo.saveReport).toHaveBeenCalledWith("s1", { summary: "ok" });
   });
 
   it("refuses a 4th session on the same link", async () => {
-    repo.countSince.mockResolvedValue(3);
+    repo.startExclusive.mockResolvedValue({ conflict: "limit", closedId: null });
     await expect(service.start(PRINCIPAL, { language: "python" })).rejects.toMatchObject({ status: 409, message: "Practice limit reached" });
-    expect(repo.countSince).toHaveBeenCalledWith("iv-1", INTERVIEW.practiceCreatedAt);
   });
 });
 
@@ -129,6 +129,30 @@ describe("practice service — messages", () => {
     expect(interviewer.streamTurn).not.toHaveBeenCalled();
   });
 
+  it("allows one reply at a time per session (a second message meanwhile gets 409)", async () => {
+    let release;
+    interviewer.streamTurn.mockImplementationOnce(async function* () {
+      await new Promise((resolve) => (release = resolve));
+      yield { type: "done", ended: false, limited: false };
+    });
+    const first = drain(await send());
+    await expect(send()).rejects.toMatchObject({ status: 409, message: "A reply is still being written" });
+    expect(repo.claimMessage).toHaveBeenCalledTimes(1);
+    release();
+    await first;
+    await expect(drain(await send())).resolves.toBeDefined(); // free again
+  });
+
+  it("closes the session even if the candidate disconnects right after end_session", async () => {
+    interviewer.streamTurn.mockImplementation(async function* () {
+      yield { type: "tool", name: "end_session" };
+      throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    });
+    await expect(drain(await send())).rejects.toThrow("aborted");
+    await settle();
+    expect(repo.finish).toHaveBeenCalledWith("s1");
+  });
+
   it("finishes and reports when the agent ends the session", async () => {
     interviewer.streamTurn.mockImplementation(async function* () {
       yield { type: "done", ended: true, limited: false };
@@ -155,6 +179,14 @@ describe("practice service — finish and report", () => {
     await service.finish(PRINCIPAL, "s1");
     await settle();
     expect(coach.review).not.toHaveBeenCalled();
+  });
+
+  it("get closes a session past 60 minutes and reports it as finished", async () => {
+    repo.findById.mockResolvedValue(active(61));
+    const view = await service.get(PRINCIPAL, "s1");
+    expect(view).toMatchObject({ status: "finished", reportStatus: "pending" });
+    await settle();
+    expect(repo.finish).toHaveBeenCalledWith("s1");
   });
 
   it.each([

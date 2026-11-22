@@ -24,15 +24,23 @@ export class CoachFailedError extends Error {
 
 const contextSchema = z.object({ code: z.string(), language: z.string() });
 
+// "[0, 1]\n" and "[0,1]" are the same answer.
+const sameOutput = (actual, expected) => actual.replace(/\s+/g, "") === String(expected).replace(/\s+/g, "");
+
 // The practice coach: a ReAct agent with a structured response (the report). It runs the
 // candidate's final code on cases it invents; the report keeps only tests that really ran.
 export const createPracticeCoach = ({ model, fallbackModel, runCode, languages, log = () => {} }) => {
   const review = async ({ transcript, code, language }) => {
-    const runs = new Map(); // runId → output, for this review only
+    const runs = new Map(); // runId → output, for this review only; runs of the candidate's code
+    const candidateCode = (code ?? "").trim();
+    const recordRun = ({ runId, code: ran, output }) => {
+      // A run of the model's own solution says nothing about the candidate's code.
+      if (candidateCode && ran.includes(candidateCode)) runs.set(runId, output);
+    };
     const agent = createAgent({
       model,
       tools: [
-        createRunCodeTool({ runCode, languages, onRun: ({ runId, output }) => runs.set(runId, output) }),
+        createRunCodeTool({ runCode, languages, onRun: recordRun }),
         createReadCandidateCodeTool(),
       ],
       systemPrompt: COACH_PROMPT,
@@ -59,12 +67,15 @@ export const createPracticeCoach = ({ model, fallbackModel, runCode, languages, 
     }
     const report = result?.structuredResponse;
     if (!report) throw new CoachFailedError();
-    // Honest report: drop tests the model never ran, let each run back one test only, and
-    // show what the code really printed.
+    // Honest report: keep only tests backed by a real run of the candidate's code (one test
+    // per run), show what it really printed, and decide `passed` from that output.
     const cited = new Set();
     const testsRun = report.testsRun
       .filter((test) => runs.has(test.runId) && !cited.has(test.runId) && cited.add(test.runId))
-      .map((test) => ({ ...test, actual: runs.get(test.runId) }));
+      .map((test) => {
+        const actual = runs.get(test.runId);
+        return { ...test, actual, passed: sameOutput(actual, test.expected) };
+      });
     return { ...report, testsRun };
   };
 

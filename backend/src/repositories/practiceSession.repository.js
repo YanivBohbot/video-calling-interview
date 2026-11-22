@@ -9,6 +9,27 @@ export const createPracticeSessionRepository = ({ prisma }) => {
 
     findById: (id) => sessions.findUnique({ where: { id } }),
 
+    // Starts a session if the link allows it, atomically: a per-interview advisory lock
+    // serialises concurrent starts, so N parallel requests can't all see "no active session,
+    // fewer than `max` used". An active session started before `staleBefore` is abandoned:
+    // it is closed here and its id returned (`closedId`) so the caller writes its report.
+    // → { session, closedId } | { conflict: "active" } | { conflict: "limit", closedId }
+    startExclusive: ({ interviewId, language, since, max, staleBefore }) =>
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${interviewId}))`;
+        const rows = tx.aiPracticeSession;
+        let closedId = null;
+        const current = await rows.findFirst({ where: { interviewId, status: "active" } });
+        if (current) {
+          if (new Date(current.startedAt) > staleBefore) return { conflict: "active" };
+          await rows.update({ where: { id: current.id }, data: { status: "finished", finishedAt: new Date() } });
+          closedId = current.id;
+        }
+        const used = await rows.count({ where: { interviewId, startedAt: { gte: since } } });
+        if (used >= max) return { conflict: "limit", closedId };
+        return { session: await rows.create({ data: { interviewId, language } }), closedId };
+      }),
+
     findActive: (interviewId) => sessions.findFirst({ where: { interviewId, status: "active" } }),
 
     countSince: (interviewId, since) => sessions.count({ where: { interviewId, startedAt: { gte: since } } }),

@@ -23,6 +23,8 @@ beforeEach(() => {
         id: "iv-1", interviewerId: "u-ada", role: "Backend", interviewType: "technical", practiceCreatedAt: new Date(Date.now() - 60_000),
       }),
     },
+    $transaction: vi.fn(async (fn) => fn(prisma)),
+    $executeRaw: vi.fn().mockResolvedValue(1),
     aiPracticeSession: {
       create: vi.fn(async ({ data }) => session(data)),
       findUnique: vi.fn(async ({ where }) => (where.id === "s1" ? session() : null)),

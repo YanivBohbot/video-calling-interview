@@ -50,6 +50,20 @@ describe("POST /api/interviews/:id/practice", () => {
   });
 });
 
+describe("demo budget", () => {
+  it("caps practice links for the public demo at 3 per hour, shared by all visitors", async () => {
+    prisma.interview.findUnique.mockImplementation(async ({ where }) =>
+      where.id === "iv-d" ? { id: "iv-d", interviewerId: "u-demo" } : { id: "iv-1", interviewerId: "u-ada" },
+    );
+    for (let i = 0; i < 3; i++) expect((await request(app).post("/api/interviews/iv-d/practice").set(authAs(demo))).status).toBe(200);
+    const blocked = await request(app).post("/api/interviews/iv-d/practice").set(authAs(demo));
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.retryAfter).toBeGreaterThan(0);
+    // Signed-in interviewers are not affected.
+    expect((await request(app).post("/api/interviews/iv-1/practice")).status).toBe(200);
+  });
+});
+
 describe("GET /api/interviews/:id/practice", () => {
   it("shows the owner when the link was created and when it was used — nothing else", async () => {
     const res = await request(app).get("/api/interviews/iv-1/practice");

@@ -1,4 +1,4 @@
-import { AppError, NotFoundError, ValidationError } from "../shared/errors.js";
+import { AppError, NotFoundError, RateLimitError, ValidationError } from "../shared/errors.js";
 import { averageDuration } from "../shared/stats.js";
 import { validateQuestionsPayload } from "../validators/question.validation.js";
 import { generateInviteSecret } from "../auth/inviteSecrets.js";
@@ -15,7 +15,14 @@ const assertStatus = (status) => {
 
 // Every method takes the caller (principal) first. Interviewers and the demo visitor
 // only ever see their own interviews: anything else is "not found", so ids can't be probed.
-export const createInterviewService = ({ interviewRepository, practiceSessionRepository, clientUrl }) => {
+// `demoPracticeLimiter`: the demo is public, and each practice link opens 3 AI sessions —
+// links made in demo mode share one small budget.
+export const createInterviewService = ({
+  interviewRepository,
+  practiceSessionRepository,
+  demoPracticeLimiter = { check: () => ({ ok: true }) },
+  clientUrl,
+}) => {
   const notFound = () => new NotFoundError("Interview not found");
 
   const isOwner = (principal, interview) => !!interview && interview.interviewerId === principal.userId;
@@ -114,6 +121,10 @@ export const createInterviewService = ({ interviewRepository, practiceSessionRep
   // New AI practice link (candidate-only); replaces any previous one. Only the hash is stored.
   const createPracticeLink = async (principal, id) => {
     await assertOwned(principal, id);
+    if (principal.kind === DEMO) {
+      const gate = demoPracticeLimiter.check("demo");
+      if (!gate.ok) throw new RateLimitError("Too many practice links in demo mode, try again later", gate.retryAfter);
+    }
     const { secret, hash } = generateInviteSecret();
     await interviewRepository.setPracticeHash(id, hash);
     return { url: `${clientUrl}/practice/${encodeURIComponent(id)}#practice=${secret}` };

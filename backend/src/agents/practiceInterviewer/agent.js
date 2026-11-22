@@ -1,4 +1,4 @@
-import { createAgent, dynamicSystemPromptMiddleware } from "langchain";
+import { createAgent, dynamicSystemPromptMiddleware, ToolMessage } from "langchain";
 import { z } from "zod";
 import {
   createRunCodeTool,
@@ -25,6 +25,8 @@ const contextSchema = z.object({
   code: z.string(),
   language: z.string(),
 });
+
+const CANCELLED_TOOL_RESULT = "Cancelled: the candidate disconnected before this finished.";
 
 const threadOf = (sessionId) => ({ configurable: { thread_id: `practice:${sessionId}` } });
 
@@ -66,10 +68,33 @@ export const createPracticeInterviewer = ({
     ],
   });
 
+  // A turn aborted during a tool call (candidate disconnected) leaves an AI message whose
+  // tool calls have no result; OpenAI rejects such a history (400), which would break the
+  // session for good. Answer each of them before the next turn.
+  const repairUnansweredToolCalls = async (sessionId) => {
+    const messages = (await agent.getState(threadOf(sessionId)))?.values?.messages ?? [];
+    const answered = new Set(messages.filter((m) => m.type === "tool").map((m) => m.tool_call_id));
+    const missing = messages
+      .filter((m) => m.type === "ai")
+      .flatMap((m) => m.tool_calls ?? [])
+      .filter((call) => !answered.has(call.id));
+    if (missing.length === 0) return;
+    await agent.updateState(
+      threadOf(sessionId),
+      {
+        messages: missing.map(
+          (call) => new ToolMessage({ tool_call_id: call.id, name: call.name, content: CANCELLED_TOOL_RESULT }),
+        ),
+      },
+      "tools",
+    );
+  };
+
   // One candidate message → events: { type: "token", text } (the answer as it is written),
   // { type: "tool", name } (a tool the agent used), then { type: "done", ended, limited }.
   // Aborting `signal` (candidate disconnected) stops the loop; the iteration then throws.
   async function* streamTurn({ sessionId, text, code, language, role, interviewType, signal }) {
+    await repairUnansweredToolCalls(sessionId);
     let ended = false;
     let limited = false;
     const stream = await agent.stream(

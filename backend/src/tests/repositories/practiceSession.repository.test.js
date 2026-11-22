@@ -51,3 +51,50 @@ describe("practiceSession repository", () => {
     expect(findFirst).toHaveBeenCalledWith({ where: { interviewId: "iv-1", status: "active" } });
   });
 });
+
+describe("practiceSession repository — startExclusive", () => {
+  const STALE = new Date("2026-11-22T11:00:00Z");
+  const SINCE = new Date("2026-11-20T00:00:00Z");
+  const txWith = (session) => {
+    const calls = [];
+    const tx = {
+      $executeRaw: vi.fn(async () => calls.push("lock")),
+      aiPracticeSession: {
+        findFirst: vi.fn(async () => (calls.push("findFirst"), session.active)),
+        update: vi.fn(async () => calls.push("update")),
+        count: vi.fn(async () => (calls.push("count"), session.used)),
+        create: vi.fn(async ({ data }) => (calls.push("create"), { id: "new", ...data })),
+      },
+    };
+    const prisma = { aiPracticeSession: {}, $transaction: vi.fn(async (fn) => fn(tx)) };
+    return { repo: createPracticeSessionRepository({ prisma }), tx, calls };
+  };
+  const start = (repo) => repo.startExclusive({ interviewId: "iv-1", language: "python", since: SINCE, max: 3, staleBefore: STALE });
+
+  it("takes the interview's lock before reading, then creates", async () => {
+    const { repo, calls } = txWith({ active: null, used: 0 });
+    expect(await start(repo)).toEqual({ session: { id: "new", interviewId: "iv-1", language: "python" }, closedId: null });
+    expect(calls).toEqual(["lock", "findFirst", "count", "create"]);
+  });
+
+  it("refuses while a recent session is active", async () => {
+    const { repo, tx } = txWith({ active: { id: "s1", startedAt: new Date("2026-11-22T11:30:00Z") }, used: 1 });
+    expect(await start(repo)).toEqual({ conflict: "active" });
+    expect(tx.aiPracticeSession.create).not.toHaveBeenCalled();
+  });
+
+  it("closes an abandoned active session, then starts", async () => {
+    const { repo, tx } = txWith({ active: { id: "s1", startedAt: new Date("2026-11-22T10:00:00Z") }, used: 1 });
+    expect(await start(repo)).toMatchObject({ session: { id: "new" }, closedId: "s1" });
+    expect(tx.aiPracticeSession.update).toHaveBeenCalledWith({
+      where: { id: "s1" }, data: { status: "finished", finishedAt: expect.any(Date) },
+    });
+  });
+
+  it("refuses past the cap", async () => {
+    const { repo, tx } = txWith({ active: null, used: 3 });
+    expect(await start(repo)).toEqual({ conflict: "limit", closedId: null });
+    expect(tx.aiPracticeSession.count).toHaveBeenCalledWith({ where: { interviewId: "iv-1", startedAt: { gte: SINCE } } });
+    expect(tx.aiPracticeSession.create).not.toHaveBeenCalled();
+  });
+});

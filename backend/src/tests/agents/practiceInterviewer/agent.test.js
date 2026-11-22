@@ -82,6 +82,23 @@ describe("practice interviewer agent", () => {
     expect(await interviewer.history("other")).toEqual([]);
   });
 
+  it("after a disconnect during a tool call, the next turn sends every tool call with its result", async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: "run_code", args: { language: "python", code: "1" }, id: "call-1" }])
+      .respond((messages) => new AIMessage(`seen ${messages.map((m) => m.type).join(",")}`));
+    const blocked = vi.fn(() => new Promise(() => {})); // never answers: the candidate leaves first
+    const { interviewer } = build(model, { runCode: blocked });
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+    await expect(collect(interviewer.streamTurn({ sessionId: "s1", text: "run it", ...TURN, signal: controller.signal }))).rejects.toThrow();
+    await collect(interviewer.streamTurn({ sessionId: "s1", text: "I'm back", ...TURN }));
+    const secondCall = model.calls.at(-1).messages;
+    const toolCallIds = secondCall.flatMap((m) => m.tool_calls?.map((c) => c.id) ?? []);
+    const answered = secondCall.filter((m) => m.type === "tool").map((m) => m.tool_call_id);
+    expect(toolCallIds).toEqual(["call-1"]);
+    expect(answered).toEqual(["call-1"]);
+  });
+
   it("stops when the candidate disconnects (abort signal)", async () => {
     const model = fakeModel();
     for (let i = 0; i < 6; i++) model.respondWithTools([{ name: "run_code", args: { language: "python", code: "1" } }]);

@@ -55,6 +55,8 @@ const CODE_RUNS_PER_MINUTE = 30;
 const ONE_MINUTE_MS = 60 * 1000;
 // AI practice: messages per practice link.
 const PRACTICE_MESSAGES_PER_MINUTE = 10;
+// Practice links created in demo mode, shared by every demo visitor (each opens 3 sessions).
+const DEMO_PRACTICE_LINKS_PER_HOUR = 3;
 
 // Composition root: the only place that knows which implementation backs each
 // dependency, and the only place the layers are wired together:
@@ -178,6 +180,7 @@ export const createContainer = ({
     interview: createInterviewService({
       interviewRepository: repositories.interview,
       practiceSessionRepository: repositories.practiceSession,
+      demoPracticeLimiter: createRateLimiter({ max: DEMO_PRACTICE_LINKS_PER_HOUR, windowMs: ONE_HOUR_MS }),
       clientUrl: config.clientUrl,
     }),
     question: createQuestionService({
