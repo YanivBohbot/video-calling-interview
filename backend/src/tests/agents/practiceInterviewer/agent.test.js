@@ -6,6 +6,12 @@ import { createPracticeInterviewer } from "../../../agents/practiceInterviewer/i
 const LANGUAGES = ["javascript", "python"];
 const TURN = { role: "Backend engineer", interviewType: "technical", code: "def two_sum(): pass", language: "python" };
 
+// A model answer that only calls tools, with no words (as OpenAI usually sends it;
+// fakeModel's respondWithTools would echo the prompt as the message's text).
+let callCount = 0;
+const toolCalls = (calls) =>
+  new AIMessage({ content: "", tool_calls: calls.map((call) => ({ id: call.id ?? `call-${++callCount}`, ...call })) });
+
 const build = (model, overrides = {}) => {
   const deps = {
     model,
@@ -27,7 +33,7 @@ const collect = async (events) => {
 describe("practice interviewer agent", () => {
   it("opens with find_problem, streams its answer, and reports the turn", async () => {
     const model = fakeModel()
-      .respondWithTools([{ name: "find_problem", args: { difficulty: "EASY", tags: [] } }])
+      .respond(toolCalls([{ name: "find_problem", args: { difficulty: "EASY", tags: [] } }]))
       .respond(new AIMessage("Here is your problem, inspired by Two Sum (https://leetcode.com/problems/two-sum/)."));
     const { interviewer, deps } = build(model);
     const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "Hi, I'm ready.", ...TURN }));
@@ -40,7 +46,7 @@ describe("practice interviewer agent", () => {
 
   it("gives read_candidate_code the code sent with this message", async () => {
     const model = fakeModel()
-      .respondWithTools([{ name: "read_candidate_code", args: {} }])
+      .respond(toolCalls([{ name: "read_candidate_code", args: {} }]))
       .respond((messages) => new AIMessage(`I see: ${messages.at(-1).content}`));
     const { interviewer } = build(model);
     const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "Done?", ...TURN }));
@@ -49,7 +55,7 @@ describe("practice interviewer agent", () => {
 
   it("reports ended when the agent calls end_session", async () => {
     const model = fakeModel()
-      .respondWithTools([{ name: "end_session", args: { reason: "solved" } }])
+      .respond(toolCalls([{ name: "end_session", args: { reason: "solved" } }]))
       .respond(new AIMessage("Great job, goodbye!"));
     const { interviewer } = build(model);
     const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "I'm done", ...TURN }));
@@ -60,7 +66,7 @@ describe("practice interviewer agent", () => {
 
   it("stops a looping turn after 6 model calls and reports limited", async () => {
     const model = fakeModel();
-    for (let i = 0; i < 10; i++) model.respondWithTools([{ name: "run_code", args: { language: "python", code: "1" } }]);
+    for (let i = 0; i < 10; i++) model.respond(toolCalls([{ name: "run_code", args: { language: "python", code: "1" } }]));
     const { interviewer } = build(model);
     const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "Run it", ...TURN }));
     expect(model.callCount).toBe(6);
@@ -69,7 +75,7 @@ describe("practice interviewer agent", () => {
 
   it("history keeps the conversation only: no tool messages, no limit message", async () => {
     const model = fakeModel()
-      .respondWithTools([{ name: "read_candidate_code", args: {} }])
+      .respond(toolCalls([{ name: "read_candidate_code", args: {} }]))
       .respond(new AIMessage("First answer"))
       .respond(new AIMessage("Second answer"));
     const { interviewer } = build(model);
@@ -84,9 +90,24 @@ describe("practice interviewer agent", () => {
     expect(await interviewer.history("other")).toEqual([]);
   });
 
+  it("keeps the words the model wrote before a tool call, live and in the history", async () => {
+    const model = fakeModel()
+      .respond(new AIMessage({ content: "Let me run your code.", tool_calls: [{ id: "c1", name: "read_candidate_code", args: {} }] }))
+      .respond(new AIMessage("All tests pass."));
+    const { interviewer } = build(model);
+    const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "Done", ...TURN }));
+    const tokens = events.filter((e) => e.type === "token").map((e) => e.text).join("");
+    expect(tokens).toContain("Let me run your code.");
+    expect(await interviewer.history("s1")).toEqual([
+      { role: "candidate", text: "Done" },
+      { role: "interviewer", text: "Let me run your code." },
+      { role: "interviewer", text: "All tests pass." },
+    ]);
+  });
+
   it("after a disconnect during a tool call, the next turn sends every tool call with its result", async () => {
     const model = fakeModel()
-      .respondWithTools([{ name: "run_code", args: { language: "python", code: "1" }, id: "call-1" }])
+      .respond(toolCalls([{ name: "run_code", args: { language: "python", code: "1" }, id: "call-1" }]))
       .respond((messages) => new AIMessage(`seen ${messages.map((m) => m.type).join(",")}`));
     const blocked = vi.fn(() => new Promise(() => {})); // never answers: the candidate leaves first
     const { interviewer } = build(model, { runCode: blocked });
@@ -103,7 +124,7 @@ describe("practice interviewer agent", () => {
 
   it("stops when the candidate disconnects (abort signal)", async () => {
     const model = fakeModel();
-    for (let i = 0; i < 6; i++) model.respondWithTools([{ name: "run_code", args: { language: "python", code: "1" } }]);
+    for (let i = 0; i < 6; i++) model.respond(toolCalls([{ name: "run_code", args: { language: "python", code: "1" } }]));
     const slowRun = vi.fn(() => new Promise((resolve) => setTimeout(() => resolve({ output: "", exitCode: 0, timedOut: false }), 200)));
     const { interviewer } = build(model, { runCode: slowRun });
     const controller = new AbortController();

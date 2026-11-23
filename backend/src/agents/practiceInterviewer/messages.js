@@ -9,7 +9,3 @@ export const textOf = (content) => {
   if (Array.isArray(content)) return content.map((part) => (part?.type === "text" ? part.text : "")).join("");
   return "";
 };
-
-// An AI message (or streamed chunk) that calls tools rather than answering the candidate.
-export const hasToolCalls = (message) =>
-  (message.tool_calls?.length ?? 0) > 0 || (message.tool_call_chunks?.length ?? 0) > 0;

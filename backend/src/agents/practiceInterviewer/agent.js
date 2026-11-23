@@ -8,7 +8,7 @@ import {
 } from "../tools/index.js";
 import { turnLimits, isLimitMessage, withFallback, createLoggingMiddleware } from "../middleware/index.js";
 import { buildInterviewerPrompt } from "./prompts.js";
-import { threadOf, textOf, hasToolCalls } from "./messages.js";
+import { threadOf, textOf } from "./messages.js";
 import { repairUnansweredToolCalls } from "./repair.js";
 import { toTurnEvents } from "./events.js";
 
@@ -82,8 +82,9 @@ export const createPracticeInterviewer = ({
     return messages.flatMap((message) => {
       if (message.type === "human") return [{ role: "candidate", text: textOf(message.content) }];
       if (message.type !== "ai" || isLimitMessage(message)) return [];
+      // An answer, or the words written before a tool call ("Let me run your code.").
       const text = textOf(message.content);
-      return text && !hasToolCalls(message) ? [{ role: "interviewer", text }] : [];
+      return text ? [{ role: "interviewer", text }] : [];
     });
   };
 
