@@ -15,8 +15,9 @@ const UNAVAILABLE = 'The AI interviewer is unavailable right now.';
 const messageOf = (err: unknown) => (err instanceof AiApiError ? err.message : UNAVAILABLE);
 
 // The state of the room's AI interviewer panel. The candidate starts the session and
-// chats (answers stream in); the interviewer only reads, by polling every 3 s. Both see the
-// interview's latest session, so a reloaded room shows the conversation and its report.
+// chats (answers stream in); the interviewer only reads, by polling every 3 s. The candidate
+// polls too between their messages, so an End clicked by the interviewer shows up. Both see
+// the interview's latest session, so a reloaded room shows the conversation and its report.
 export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: ApiFetch; interviewId: string; role: AiRole }) {
   const api = useMemo(() => createAiInterviewerApi(apiFetch, interviewId), [apiFetch, interviewId]);
   const [phase, setPhase] = useState<AiPhase>('loading');
@@ -28,11 +29,15 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [reportWaitOver, setReportWaitOver] = useState(false);
+  // How many new sessions the candidate may still start (null until the first load).
+  const [sessionsLeft, setSessionsLeft] = useState<number | null>(null);
 
   const sessionRef = useRef<AiSession | null>(null);
   const pollRef = useRef<PollState>({ sessionId: null, polls: 0, waitOver: false });
   const replyingRef = useRef(false);
   const turnRef = useRef<AbortController | null>(null);
+  // Bumped when a reply starts and when it ends: a poll that spans either is stale.
+  const turnSeqRef = useRef(0);
 
   const show = useCallback((next: AiSession | null) => {
     sessionRef.current = next;
@@ -48,12 +53,17 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
 
   // Fetches the interview's latest session, unless nothing about it can change any more.
   const load = useCallback(async () => {
-    const id = await api.current();
+    const seq = turnSeqRef.current;
+    const { sessionId: id, sessionsLeft: left } = await api.current();
+    setSessionsLeft(left);
     if (!id) return show(null);
     const step = pollStep(pollRef.current, id, sessionRef.current);
     pollRef.current = step.poll;
     setReportWaitOver(step.poll.waitOver);
-    if (step.fetch) show(await api.get(id));
+    if (!step.fetch) return;
+    const next = await api.get(id);
+    // A reply started or ended meanwhile: this history is older than the chat on screen.
+    if (turnSeqRef.current === seq) show(next);
   }, [api, show]);
 
   const tick = useCallback(() => {
@@ -63,21 +73,19 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
     );
   }, [load]);
 
-  // First load; the interviewer then follows the session live.
   useEffect(() => {
     tick();
-    if (role !== 'interviewer') return;
-    const timer = setInterval(tick, POLL_MS);
-    return () => clearInterval(timer);
-  }, [tick, role]);
+  }, [tick]);
 
-  // The candidate waits for the report (the interviewer's loop already covers it).
-  const waitingForReport = role === 'candidate' && phase === 'finished' && session?.reportStatus === 'pending' && !reportWaitOver;
+  // The interviewer follows the session live. The candidate polls while a session is
+  // active (not during a reply: it streams in) and while the report is being written.
+  const waitingForReport = phase === 'finished' && session?.reportStatus === 'pending' && !reportWaitOver;
+  const polling = role === 'interviewer' || (phase === 'active' && !replying) || waitingForReport;
   useEffect(() => {
-    if (!waitingForReport) return;
+    if (!polling) return;
     const timer = setInterval(tick, POLL_MS);
     return () => clearInterval(timer);
-  }, [waitingForReport, tick]);
+  }, [polling, tick]);
 
   // Leaving the room mid-reply stops the agent (the backend aborts on disconnect).
   useEffect(() => () => turnRef.current?.abort(), []);
@@ -87,6 +95,7 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
       const current = sessionRef.current;
       if (role !== 'candidate' || !current || current.status !== 'active' || replyingRef.current) return;
       setError(null);
+      turnSeqRef.current += 1;
       replyingRef.current = true;
       setReplying(true);
       setChat((state) => addCandidateMessage(state, text));
@@ -109,6 +118,7 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
         setError(messageOf(err));
         resync = true; // refused or failed: the saved history is the truth
       } finally {
+        turnSeqRef.current += 1;
         replyingRef.current = false;
         setReplying(false);
         turnRef.current = null;
@@ -148,6 +158,21 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
     }
   }, [api, load]);
 
+  // A failed report, written again; the wait for it starts over.
+  const retryReport = useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current) return;
+    setError(null);
+    try {
+      await api.retryReport(current.id);
+      pollRef.current = { sessionId: current.id, polls: 0, waitOver: false };
+      setReportWaitOver(false);
+      show(await api.get(current.id));
+    } catch (err) {
+      setError(messageOf(err));
+    }
+  }, [api, show]);
+
   const checkReport = useCallback(() => {
     pollRef.current = { ...pollRef.current, polls: 0, waitOver: false };
     setReportWaitOver(false);
@@ -161,9 +186,11 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
     replying,
     error: error ?? pollError,
     reportWaitOver,
+    sessionsLeft,
     start,
     send,
     finish,
     checkReport,
+    retryReport,
   };
 }

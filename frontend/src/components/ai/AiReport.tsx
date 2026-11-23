@@ -20,7 +20,8 @@ export const AiReport: React.FC<{
   report: Report | null;
   waitOver: boolean;
   onCheckAgain: () => void;
-}> = ({ status, report, waitOver, onCheckAgain }) => {
+  onRetry: () => void;
+}> = ({ status, report, waitOver, onCheckAgain, onRetry }) => {
   if (status === 'ready' && report) {
     return (
       <div className="space-y-4">
@@ -80,11 +81,9 @@ export const AiReport: React.FC<{
   return (
     <div className="space-y-2 text-sm text-slate-400">
       <p>{status === 'failed' ? 'The report could not be written this time.' : 'The report is taking longer than expected.'}</p>
-      {status !== 'failed' && (
-        <button onClick={onCheckAgain} className="flex items-center gap-1.5 text-violet-300 hover:text-white">
-          <RefreshCw size={14} /> Check again
-        </button>
-      )}
+      <button onClick={status === 'failed' ? onRetry : onCheckAgain} className="flex items-center gap-1.5 text-violet-300 hover:text-white">
+        <RefreshCw size={14} /> {status === 'failed' ? 'Try again' : 'Check again'}
+      </button>
     </div>
   );
 };

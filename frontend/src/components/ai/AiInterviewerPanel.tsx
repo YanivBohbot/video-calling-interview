@@ -3,6 +3,7 @@ import { Bot, Send, Loader2, Square, Info } from 'lucide-react';
 import type { ApiFetch } from '../../lib/api';
 import { useAiInterviewer, type AiRole } from '../../lib/useAiInterviewer';
 import { AiReport } from './AiReport';
+import { AiMarkdown } from './AiMarkdown';
 
 const NOTICE =
   'You are talking to an AI interviewer. Your code and messages are sent to OpenAI. The interviewer can read this conversation and the report.';
@@ -21,9 +22,11 @@ export const AiInterviewerPanel: React.FC<{
   const isCandidate = role === 'candidate';
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
 
+  // New messages, the session ending and the report arriving all bring the bottom into view.
+  const reportStatus = ai.session?.reportStatus;
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [ai.messages]);
+  }, [ai.messages, ai.phase, reportStatus]);
 
   const submit = () => {
     const text = draft.trim();
@@ -75,13 +78,15 @@ export const AiInterviewerPanel: React.FC<{
 
         {ai.messages.map((message, i) => (
           <div key={i} className={message.role === 'candidate' ? 'flex justify-end' : 'flex justify-start'}>
-            <p
-              className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm ${
-                message.role === 'candidate' ? 'bg-brand/30 text-white' : 'bg-white/5 text-slate-100'
-              }`}
-            >
-              {message.text}
-            </p>
+            {message.role === 'candidate' ? (
+              <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-sm bg-brand/30 text-white">
+                {message.text}
+              </p>
+            ) : (
+              <div className="max-w-[85%] min-w-0 break-words rounded-xl px-3 py-2 text-sm bg-white/5 text-slate-100">
+                <AiMarkdown text={message.text} />
+              </div>
+            )}
           </div>
         ))}
         {ai.replying && (
@@ -98,12 +103,16 @@ export const AiInterviewerPanel: React.FC<{
               report={ai.session.report}
               waitOver={ai.reportWaitOver}
               onCheckAgain={ai.checkReport}
+              onRetry={() => void ai.retryReport()}
             />
-            {isCandidate && (
-              <button onClick={start} className="text-xs text-slate-400 hover:text-white underline underline-offset-4">
-                Start a new session
-              </button>
-            )}
+            {isCandidate &&
+              (ai.sessionsLeft === 0 ? (
+                <p className="text-xs text-slate-500">You have used every AI interviewer session of this interview.</p>
+              ) : (
+                <button onClick={start} className="text-xs text-slate-400 hover:text-white underline underline-offset-4">
+                  Start a new session{ai.sessionsLeft !== null && ` (${ai.sessionsLeft} left)`}
+                </button>
+              ))}
           </div>
         )}
 

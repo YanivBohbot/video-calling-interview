@@ -47,12 +47,23 @@ describe('AI interviewer API', () => {
     expect(onEvent).not.toHaveBeenCalled();
   });
 
-  it('current returns the active session id or null', async () => {
-    const apiFetch = vi.fn().mockResolvedValueOnce(json(200, { sessionId: 's1' })).mockResolvedValueOnce(json(200, { sessionId: null }));
+  it('current returns the latest session id (or null) and the sessions left', async () => {
+    const apiFetch = vi
+      .fn()
+      .mockResolvedValueOnce(json(200, { sessionId: 's1', sessionsLeft: 2 }))
+      .mockResolvedValueOnce(json(200, { sessionId: null, sessionsLeft: 3 }));
     const api = createAiInterviewerApi(apiFetch, 'iv-1');
-    expect(await api.current()).toBe('s1');
-    expect(await api.current()).toBeNull();
+    expect(await api.current()).toEqual({ sessionId: 's1', sessionsLeft: 2 });
+    expect(await api.current()).toEqual({ sessionId: null, sessionsLeft: 3 });
     expect(apiFetch).toHaveBeenCalledWith('/api/interviews/iv-1/ai/sessions/current', undefined);
+  });
+
+  it('retryReport asks for the report again', async () => {
+    const apiFetch = vi.fn(async () => json(202, { reportStatus: 'pending' }));
+    await createAiInterviewerApi(apiFetch, 'iv-1').retryReport('s1');
+    const [path, init] = apiFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(path).toBe('/api/interviews/iv-1/ai/sessions/s1/report');
+    expect(init.method).toBe('POST');
   });
 
   it('a 429 carries retryAfter', async () => {
