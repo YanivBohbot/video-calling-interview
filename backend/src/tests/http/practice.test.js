@@ -115,6 +115,18 @@ describe("/api/interviews/:id/ai", () => {
     }));
   });
 
+  it("POST /sessions/:sid/report writes a failed report again", async () => {
+    prisma.aiPracticeSession.findUnique.mockResolvedValue(session({ status: "finished", report: { failed: true } }));
+    const res = await request(app).post(`${AI}/sessions/s1/report`);
+    expect(res.status).toBe(202);
+    expect(res.body).toEqual({ reportStatus: "pending" });
+    await vi.waitFor(() => expect(prisma.aiPracticeSession.update).toHaveBeenCalledWith({
+      where: { id: "s1" }, data: { report: { summary: "ok" } }, select: { id: true },
+    }));
+    prisma.aiPracticeSession.updateMany.mockResolvedValue({ count: 0 });
+    expect((await request(app).post(`${AI}/sessions/s1/report`)).status).toBe(409);
+  });
+
   it("aborts the agent when the candidate disconnects mid-answer", async () => {
     let seenSignal;
     practiceInterviewer.streamTurn.mockImplementation(async function* ({ signal }) {
@@ -144,7 +156,7 @@ describe("/api/interviews/:id/ai", () => {
     prisma.aiPracticeSession.findFirst.mockResolvedValue(session({ status: "finished" }));
     const res = await request(app).get(`${AI}/sessions/current`);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ sessionId: "s1" });
+    expect(res.body).toEqual({ sessionId: "s1", sessionsLeft: 3 });
     expect(prisma.aiPracticeSession.findFirst).toHaveBeenCalledWith({ where: { interviewId: "iv-1" }, orderBy: { startedAt: "desc" } });
   });
 

@@ -31,6 +31,8 @@ beforeEach(() => {
     startExclusive: vi.fn(async ({ interviewId, language }) => ({ session: { ...active(0), interviewId, language }, closedId: null })),
     findById: vi.fn(async () => active()),
     findLatest: vi.fn(async () => null),
+    countForInterview: vi.fn(async () => 0),
+    claimReportRetry: vi.fn(async () => true),
     claimMessage: vi.fn(async () => true),
     finish: vi.fn(async () => true),
     saveReport: vi.fn(async () => {}),
@@ -91,25 +93,33 @@ describe("practice service — access", () => {
 describe("practice service — current", () => {
   it("returns the interview's latest session id", async () => {
     repo.findLatest.mockResolvedValue(active(5));
-    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: "s1" });
-    expect(await service.current(OWNER, "iv-1")).toEqual({ sessionId: "s1" });
+    repo.countForInterview.mockResolvedValue(1);
+    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: "s1", sessionsLeft: 2 });
+    expect(await service.current(OWNER, "iv-1")).toEqual({ sessionId: "s1", sessionsLeft: 2 });
     expect(repo.findLatest).toHaveBeenCalledWith("iv-1");
+    expect(repo.countForInterview).toHaveBeenCalledWith("iv-1");
   });
 
   it("still returns a finished session, so a reloaded room shows its report", async () => {
     repo.findLatest.mockResolvedValue(active(5, { status: "finished", report: { summary: "ok" } }));
-    expect(await service.current(OWNER, "iv-1")).toEqual({ sessionId: "s1" });
+    expect(await service.current(OWNER, "iv-1")).toMatchObject({ sessionId: "s1" });
     expect(repo.finish).not.toHaveBeenCalled();
   });
 
   it("closes a session whose time is over, and still returns it", async () => {
     repo.findLatest.mockResolvedValue(active(61));
-    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: "s1" });
+    expect(await service.current(CANDIDATE, "iv-1")).toMatchObject({ sessionId: "s1" });
     expect(repo.finish).toHaveBeenCalledWith("s1");
   });
 
   it("returns null before any session", async () => {
-    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: null });
+    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: null, sessionsLeft: 3 });
+  });
+
+  it("never reports fewer than 0 sessions left", async () => {
+    repo.findLatest.mockResolvedValue(active(5, { status: "finished" }));
+    repo.countForInterview.mockResolvedValue(4);
+    expect(await service.current(CANDIDATE, "iv-1")).toMatchObject({ sessionsLeft: 0 });
   });
 });
 
@@ -213,6 +223,32 @@ describe("practice service — messages", () => {
     expect(repo.finish).toHaveBeenCalledWith("s1");
     expect(coach.review).toHaveBeenCalledWith({ transcript: [{ role: "candidate", text: "hello" }], code: "x", language: "python" });
     expect(repo.saveReport).toHaveBeenCalledWith("s1", { summary: "ok" });
+  });
+});
+
+describe("practice service — retrying a failed report", () => {
+  it("lets the candidate or the owner write the report again", async () => {
+    repo.findById.mockResolvedValue(active(5, { status: "finished", report: { failed: true } }));
+    expect(await service.retryReport(OWNER, "iv-1", "s1")).toEqual({ reportStatus: "pending" });
+    await settle();
+    expect(repo.claimReportRetry).toHaveBeenCalledWith("s1");
+    expect(coach.review).toHaveBeenCalledTimes(1);
+    expect(repo.saveReport).toHaveBeenCalledWith("s1", { summary: "ok" });
+    await service.retryReport(CANDIDATE, "iv-1", "s1");
+    await settle();
+    expect(coach.review).toHaveBeenCalledTimes(2);
+  });
+
+  it("answers 409, without calling the coach, when there is no failed report to retry", async () => {
+    repo.claimReportRetry.mockResolvedValue(false);
+    await expect(service.retryReport(CANDIDATE, "iv-1", "s1")).rejects.toMatchObject({ status: 409 });
+    await settle();
+    expect(coach.review).not.toHaveBeenCalled();
+  });
+
+  it("hides the session from anyone else", async () => {
+    await expect(service.retryReport(STRANGER, "iv-1", "s1")).rejects.toMatchObject({ status: 404 });
+    expect(repo.claimReportRetry).not.toHaveBeenCalled();
   });
 });
 

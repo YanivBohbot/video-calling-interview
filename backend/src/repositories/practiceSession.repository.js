@@ -1,5 +1,7 @@
 // Data access for AI practice sessions (table ai_practice_sessions). The conversation
 // itself is in the LangGraph checkpointer; this row holds status, counters, code and report.
+import { Prisma } from "@prisma/client";
+
 export const createPracticeSessionRepository = ({ prisma }) => {
   const sessions = prisma.aiPracticeSession;
   return {
@@ -28,6 +30,19 @@ export const createPracticeSessionRepository = ({ prisma }) => {
         if (used >= max) return { conflict: "limit", closedId };
         return { session: await rows.create({ data: { interviewId, language } }), closedId };
       }),
+
+    // How many sessions the interview has used (active or finished).
+    countForInterview: (interviewId) => sessions.count({ where: { interviewId } }),
+
+    // Clears a failed report so it can be written again. True only for the call that
+    // cleared it (two clicks at once start one report).
+    claimReportRetry: async (id) => {
+      const { count } = await sessions.updateMany({
+        where: { id, status: "finished", report: { equals: { failed: true } } },
+        data: { report: Prisma.DbNull },
+      });
+      return count === 1;
+    },
 
     // One atomic update, so two messages sent at once can't both pass the cap.
     claimMessage: async (id, { max, code, language }) => {

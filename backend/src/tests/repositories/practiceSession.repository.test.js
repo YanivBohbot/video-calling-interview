@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 import { createPracticeSessionRepository } from "../../repositories/practiceSession.repository.js";
 
 const repoWith = (practiceSession) => createPracticeSessionRepository({ prisma: { aiPracticeSession: practiceSession } });
@@ -30,6 +31,25 @@ describe("practiceSession repository", () => {
     expect(await repoWith({ updateMany }).finish("s1")).toBe(false);
   });
 
+});
+
+describe("practiceSession repository — report retry and count", () => {
+  it("claimReportRetry clears a failed report of a finished session, atomically", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    expect(await repoWith({ updateMany }).claimReportRetry("s1")).toBe(true);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "s1", status: "finished", report: { equals: { failed: true } } },
+      data: { report: Prisma.DbNull },
+    });
+    updateMany.mockResolvedValue({ count: 0 });
+    expect(await repoWith({ updateMany }).claimReportRetry("s1")).toBe(false);
+  });
+
+  it("countForInterview counts every session of the interview", async () => {
+    const count = vi.fn().mockResolvedValue(2);
+    expect(await repoWith({ count }).countForInterview("iv-1")).toBe(2);
+    expect(count).toHaveBeenCalledWith({ where: { interviewId: "iv-1" } });
+  });
 });
 
 describe("practiceSession repository — findLatest", () => {

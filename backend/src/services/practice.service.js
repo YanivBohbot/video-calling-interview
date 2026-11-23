@@ -82,9 +82,11 @@ export const createPracticeService = ({
   const current = async (principal, interviewId) => {
     await loadInterview(principal, interviewId);
     const session = await sessions.findLatest(interviewId);
-    if (!session) return { sessionId: null };
+    // `sessionsLeft`: the candidate can tell before clicking whether a new session is possible.
+    const sessionsLeft = Math.max(0, MAX_SESSIONS_PER_INTERVIEW - (session ? await sessions.countForInterview(interviewId) : 0));
+    if (!session) return { sessionId: null, sessionsLeft };
     if (session.status === "active" && isOver(session)) await close(session.id);
-    return { sessionId: session.id };
+    return { sessionId: session.id, sessionsLeft };
   };
 
   const reportStatusOf = (session) => {
@@ -159,6 +161,14 @@ export const createPracticeService = ({
     })();
   };
 
+  // A report that failed (model down, timeout…) can be written again, by either side.
+  const retryReport = async (principal, interviewId, sessionId) => {
+    const { session } = await loadSession(principal, interviewId, sessionId);
+    if (!(await sessions.claimReportRetry(session.id))) throw new ConflictError("There is no failed report to retry");
+    runInBackground(() => writeReport(session.id));
+    return { reportStatus: "pending" };
+  };
+
   // The candidate or the owner may end the session.
   const finish = async (principal, interviewId, sessionId) => {
     const { session } = await loadSession(principal, interviewId, sessionId);
@@ -166,5 +176,5 @@ export const createPracticeService = ({
     return { status: "finished" };
   };
 
-  return { start, current, get, streamMessage, finish };
+  return { start, current, get, streamMessage, finish, retryReport };
 };

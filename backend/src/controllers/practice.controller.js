@@ -29,6 +29,10 @@ export const createPracticeController = ({ practiceService }) => ({
     res.status(200).json(await practiceService.finish(req.principal, req.params.id, req.params.sid));
   }),
 
+  retryReport: handle("Error retrying the AI interviewer report", async (req, res) => {
+    res.status(202).json(await practiceService.retryReport(req.principal, req.params.id, req.params.sid));
+  }),
+
   // POST + text/event-stream (the browser reads it with fetch, not EventSource).
   // Refusals happen before the first byte, so they are ordinary JSON errors.
   message: async (req, res, next) => {

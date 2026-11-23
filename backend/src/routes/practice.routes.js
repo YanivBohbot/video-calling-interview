@@ -16,5 +16,6 @@ export const createPracticeRouter = ({ practiceController }) => {
   router.get("/sessions/:sid", session, practiceController.get);
   router.post("/sessions/:sid/messages", session, validate({ body: practiceMessageBody }), practiceController.message);
   router.post("/sessions/:sid/finish", session, practiceController.finish);
+  router.post("/sessions/:sid/report", session, practiceController.retryReport);
   return router;
 };
