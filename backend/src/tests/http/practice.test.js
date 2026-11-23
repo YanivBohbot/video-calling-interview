@@ -152,7 +152,7 @@ describe("/api/interviews/:id/ai", () => {
     prisma.aiPracticeSession.count.mockResolvedValue(3);
     const res = await request(app).post(`${AI}/sessions`).send({ language: "python" });
     expect(res.status).toBe(409);
-    expect(res.body).toEqual({ message: "Practice limit reached" });
+    expect(res.body).toEqual({ message: "No AI interviewer sessions left for this interview" });
     expect(prisma.aiPracticeSession.count).toHaveBeenCalledWith({ where: { interviewId: "iv-1" } });
   });
 

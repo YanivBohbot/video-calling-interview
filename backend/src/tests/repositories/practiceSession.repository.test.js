@@ -30,13 +30,6 @@ describe("practiceSession repository", () => {
     expect(await repoWith({ updateMany }).finish("s1")).toBe(false);
   });
 
-  it("listForInterview never selects the code or the report", async () => {
-    const findMany = vi.fn().mockResolvedValue([]);
-    await repoWith({ findMany }).listForInterview("iv-1");
-    const { where, select } = findMany.mock.calls[0][0];
-    expect(where).toEqual({ interviewId: "iv-1" });
-    expect(select).toEqual({ id: true, status: true, startedAt: true, finishedAt: true });
-  });
 });
 
 describe("practiceSession repository — findLatest", () => {

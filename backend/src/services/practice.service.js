@@ -72,8 +72,8 @@ export const createPracticeService = ({
       staleBefore: new Date(now() - SESSION_MS),
     });
     if (result.closedId) runInBackground(() => writeReport(result.closedId));
-    if (result.conflict === "active") throw new ConflictError("A practice session is already active");
-    if (result.conflict === "limit") throw new ConflictError("Practice limit reached");
+    if (result.conflict === "active") throw new ConflictError("An AI interviewer session is already active");
+    if (result.conflict === "limit") throw new ConflictError("No AI interviewer sessions left for this interview");
     return result.session;
   };
 

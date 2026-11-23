@@ -125,7 +125,7 @@ describe("practice service — start", () => {
   it("refuses while another session is active", async () => {
     repo.startExclusive.mockResolvedValue({ conflict: "active" });
     await expect(service.start(CANDIDATE, "iv-1", { language: "python" })).rejects.toMatchObject({
-      status: 409, message: "A practice session is already active",
+      status: 409, message: "An AI interviewer session is already active",
     });
   });
 
@@ -139,7 +139,7 @@ describe("practice service — start", () => {
 
   it("refuses a 4th session on the same interview", async () => {
     repo.startExclusive.mockResolvedValue({ conflict: "limit", closedId: null });
-    await expect(service.start(CANDIDATE, "iv-1", { language: "python" })).rejects.toMatchObject({ status: 409, message: "Practice limit reached" });
+    await expect(service.start(CANDIDATE, "iv-1", { language: "python" })).rejects.toMatchObject({ status: 409, message: "No AI interviewer sessions left for this interview" });
   });
 });
 

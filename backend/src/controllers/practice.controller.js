@@ -13,19 +13,19 @@ const eventData = (event) => {
 };
 
 export const createPracticeController = ({ practiceService }) => ({
-  start: handle("Error starting practice session", async (req, res) => {
+  start: handle("Error starting the AI interviewer", async (req, res) => {
     res.status(201).json(await practiceService.start(req.principal, req.params.id, req.body));
   }),
 
-  current: handle("Error fetching practice session", async (req, res) => {
+  current: handle("Error fetching the AI interviewer session", async (req, res) => {
     res.status(200).json(await practiceService.current(req.principal, req.params.id));
   }),
 
-  get: handle("Error fetching practice session", async (req, res) => {
+  get: handle("Error fetching the AI interviewer session", async (req, res) => {
     res.status(200).json(await practiceService.get(req.principal, req.params.id, req.params.sid));
   }),
 
-  finish: handle("Error finishing practice session", async (req, res) => {
+  finish: handle("Error ending the AI interviewer session", async (req, res) => {
     res.status(200).json(await practiceService.finish(req.principal, req.params.id, req.params.sid));
   }),
 
