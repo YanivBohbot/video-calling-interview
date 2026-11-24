@@ -191,7 +191,7 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
                 <p className="text-sm text-slate-100 whitespace-pre-wrap">{current.text}</p>
               </>
             ) : (
-              <p className="text-xs text-slate-500">Pick a question in the Questions panel to show it to the candidate.</p>
+              <p className="text-xs text-slate-500">Pick a question in the Questions menu to show it to the candidate.</p>
             )}
           </div>
         )}
