@@ -326,7 +326,13 @@ export const CandidateRoom: React.FC = () => {
                   </div>
                   {aiOpened && !avatarSession && (
                     <div className={showAi ? 'w-[24rem] shrink-0 border-l border-white/5' : 'hidden'}>
-                      <AiInterviewerPanel apiFetch={apiFetch} interviewId={id} role="candidate" getCode={getCode} />
+                      <AiInterviewerPanel
+                        apiFetch={apiFetch}
+                        interviewId={id}
+                        role="candidate"
+                        getCode={getCode}
+                        onTextSession={avatar.textSessionStarted}
+                      />
                     </div>
                   )}
                 </div>

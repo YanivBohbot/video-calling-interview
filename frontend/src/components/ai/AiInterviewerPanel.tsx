@@ -16,8 +16,14 @@ export const AiInterviewerPanel: React.FC<{
   role: AiRole;
   // The candidate's side only: the shared editor's latest content.
   getCode?: () => { code: string; language: string };
-}> = ({ apiFetch, interviewId, role, getCode = () => ({ code: '', language: 'javascript' }) }) => {
+  // The panel has a text session (started here or found): the room stops offering the avatar.
+  onTextSession?: () => void;
+}> = ({ apiFetch, interviewId, role, getCode = () => ({ code: '', language: 'javascript' }), onTextSession }) => {
   const ai = useAiInterviewer({ apiFetch, interviewId, role });
+  const hasTextSession = !!ai.session && ai.session.mode !== 'avatar';
+  React.useEffect(() => {
+    if (hasTextSession) onTextSession?.();
+  }, [hasTextSession, onTextSession]);
   const [draft, setDraft] = React.useState('');
   const isCandidate = role === 'candidate';
   const bottomRef = React.useRef<HTMLDivElement | null>(null);

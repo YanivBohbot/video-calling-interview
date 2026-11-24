@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgentEventsEnum, LiveAvatarSession, SessionEvent } from '@heygen/liveavatar-web-sdk';
 import type { ApiFetch } from './api';
-import { AiApiError, createAiInterviewerApi } from './aiInterviewer';
+import { AiApiError, createAiInterviewerApi, type AiSession } from './aiInterviewer';
 import { AVATAR_OPENING_MESSAGE } from './aiChat';
-import { createTurnQueue, speakable } from './avatarTurns';
+import { createTurnQueue, speakable, statusForSession, type AvatarStatus } from './avatarTurns';
 import type { AskedQuestion } from './questions';
 
-// 'loading': looking for the interview's session. 'none': no session yet (the room may offer
-// the avatar). 'text': the interview's session is a text chat (the AI panel's business).
-// 'connecting' / 'live' / 'dropped': an avatar session is active, its avatar connecting,
-// connected, or gone (Reconnect). 'finished': the avatar session is over.
-export type AvatarStatus = 'loading' | 'none' | 'text' | 'connecting' | 'live' | 'dropped' | 'finished';
+export type { AvatarStatus };
 export type AvatarEndedBy = 'candidate' | 'agent' | 'interviewer';
 
 const POLL_MS = 3000;
@@ -238,6 +234,34 @@ export function useAvatarInterviewer({
     void runTurnRef.current(AVATAR_OPENING_MESSAGE);
   }, []);
 
+  // The interview's session (null before it starts).
+  const findSession = useCallback(async () => {
+    const id = await api.current();
+    return id ? api.get(id) : null;
+  }, [api]);
+
+  // A session found on the server: an active avatar one waits for Reconnect (the microphone
+  // needs a click) with the call left, and shows the question on screen again.
+  const adopt = useCallback(
+    (session: AiSession | null) => {
+      const next = statusForSession(session);
+      if (session && session.mode === 'avatar') {
+        sessionIdRef.current = session.id;
+        openedRef.current = session.messages.length > 0;
+        if (session.presentedQuestion) onQuestionRef.current(session.presentedQuestion);
+        if (next === 'finished') finishedRef.current = true;
+        else onAvatarStartRef.current();
+      }
+      setStatus(next);
+    },
+    [setStatus],
+  );
+
+  // The text panel started the interview's session in this room: the avatar is not offered.
+  const textSessionStarted = useCallback(() => {
+    if (statusRef.current === 'none') setStatus('text');
+  }, [setStatus]);
+
   // The candidate starts the interview with the avatar.
   const start = useCallback(async () => {
     if (statusRef.current !== 'none') return;
@@ -248,8 +272,14 @@ export function useAvatarInterviewer({
     try {
       sessionId = await api.start(getCodeRef.current().language, 'avatar');
     } catch (err) {
-      setStatus('none');
       setError(messageOf(err));
+      // Refused because a session exists after all (a text one, say): follow it.
+      setStatus('none');
+      try {
+        if (statusRef.current === 'none') adopt(await findSession());
+      } catch {
+        // stays 'none', with the refusal shown
+      }
       return;
     }
     sessionIdRef.current = sessionId;
@@ -258,7 +288,7 @@ export function useAvatarInterviewer({
     openedRef.current = false;
     onAvatarStartRef.current();
     if (await connect(sessionId)) greetOnce();
-  }, [api, connect, greetOnce, setStatus]);
+  }, [api, adopt, connect, findSession, greetOnce, setStatus]);
 
   // A new avatar for the same session (the previous one dropped, or the room was reloaded).
   const reconnect = useCallback(async () => {
@@ -289,21 +319,8 @@ export function useAvatarInterviewer({
     if (!enabled) return;
     let cancelled = false;
     (async () => {
-      const id = await api.current();
-      if (cancelled) return;
-      if (!id) return setStatus('none');
-      const session = await api.get(id);
-      if (cancelled) return;
-      if (session.mode !== 'avatar') return setStatus('text');
-      sessionIdRef.current = id;
-      openedRef.current = session.messages.length > 0;
-      if (session.presentedQuestion) onQuestionRef.current(session.presentedQuestion);
-      if (session.status === 'active') {
-        setStatus('dropped');
-      } else {
-        finishedRef.current = true;
-        setStatus('finished');
-      }
+      const found = await findSession();
+      if (!cancelled) adopt(found);
     })().catch(() => {
       // Unknown: the room offers what it would without a session; a start would be refused.
       if (!cancelled) setStatus('none');
@@ -311,7 +328,7 @@ export function useAvatarInterviewer({
     return () => {
       cancelled = true;
     };
-  }, [api, enabled, setStatus]);
+  }, [adopt, enabled, findSession, setStatus]);
 
   // An active avatar session is polled (not during a turn): the interviewer may end it.
   const active = status === 'connecting' || status === 'live' || status === 'dropped';
@@ -355,6 +372,7 @@ export function useAvatarInterviewer({
     reconnect,
     end,
     sendTyped,
+    textSessionStarted,
     stop: stopAvatar,
   };
 }

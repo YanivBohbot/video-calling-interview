@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTurnQueue, speakable } from './avatarTurns';
+import { createTurnQueue, speakable, statusForSession, canTypeToAvatar } from './avatarTurns';
 
 describe('avatar turn queue', () => {
   it('sends what is heard while idle', () => {
@@ -43,5 +43,25 @@ describe('speakable', () => {
 
   it('is empty for a reply with no words', () => {
     expect(speakable('  ** ')).toBe('');
+  });
+});
+
+describe('statusForSession', () => {
+  it('maps the interview session to what the room offers', () => {
+    expect(statusForSession(null)).toBe('none');
+    expect(statusForSession({ mode: 'text', status: 'active' })).toBe('text');
+    expect(statusForSession({ mode: 'text', status: 'finished' })).toBe('text');
+    expect(statusForSession({ mode: 'avatar', status: 'active' })).toBe('dropped');
+    expect(statusForSession({ mode: 'avatar', status: 'finished' })).toBe('finished');
+  });
+});
+
+describe('canTypeToAvatar', () => {
+  it('allows typing while the avatar is live or dropped, never mid-reply', () => {
+    expect(canTypeToAvatar('live', false)).toBe(true);
+    expect(canTypeToAvatar('dropped', false)).toBe(true);
+    expect(canTypeToAvatar('live', true)).toBe(false);
+    expect(canTypeToAvatar('connecting', false)).toBe(false);
+    expect(canTypeToAvatar('finished', false)).toBe(false);
   });
 });

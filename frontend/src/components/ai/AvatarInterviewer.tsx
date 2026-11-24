@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bot, Loader2, Mic, RefreshCw, Send, Square, Info } from 'lucide-react';
 import type { AvatarInterviewer as AvatarState } from '../../lib/useAvatarInterviewer';
+import { canTypeToAvatar } from '../../lib/avatarTurns';
 
 const NOTICE =
   'An AI interviewer with a talking avatar runs the interview: it asks the questions out loud and listens through your microphone. What you say and your code are sent to OpenAI and HeyGen. Your interviewer reads the conversation and receives a report.';
@@ -31,7 +32,7 @@ export const AvatarStartCard: React.FC<{ onStart: () => void; error: string | nu
 export const AvatarInterviewer: React.FC<{ avatar: AvatarState }> = ({ avatar }) => {
   const [draft, setDraft] = React.useState('');
   const active = avatar.status === 'connecting' || avatar.status === 'live' || avatar.status === 'dropped';
-  const canType = avatar.status === 'live' && !avatar.busy;
+  const canType = canTypeToAvatar(avatar.status, avatar.busy);
   const dir = avatar.captionLanguage === 'he' ? 'rtl' : 'ltr';
 
   const submit = () => {
@@ -99,7 +100,7 @@ export const AvatarInterviewer: React.FC<{ avatar: AvatarState }> = ({ avatar })
             {avatar.heardLine}
           </p>
         )}
-        {avatar.status === 'live' && (
+        {(avatar.status === 'live' || (avatar.status === 'dropped' && avatar.thinking)) && (
           <p className="flex items-center gap-2 text-xs text-slate-500">
             {avatar.thinking ? (
               <>
@@ -117,7 +118,7 @@ export const AvatarInterviewer: React.FC<{ avatar: AvatarState }> = ({ avatar })
         {avatar.error && <p className="text-xs text-red-300">{avatar.error}</p>}
       </div>
 
-      {avatar.status === 'live' && (
+      {(avatar.status === 'live' || avatar.status === 'dropped') && (
         <div className="shrink-0 border-t border-white/5 p-3 flex gap-2">
           <input
             value={draft}
