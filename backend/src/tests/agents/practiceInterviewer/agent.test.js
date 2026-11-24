@@ -90,6 +90,22 @@ describe("practice interviewer agent", () => {
     expect(await interviewer.history("other")).toEqual([]);
   });
 
+  it("on a question switch, puts the note right before the candidate's message, never in the history", async () => {
+    let seen;
+    const model = fakeModel().respond((messages) => {
+      seen = messages.map((m) => m.type ?? m._getType?.());
+      return new AIMessage("Let's move on to a new question: food rating.");
+    });
+    const { interviewer } = build(model);
+    const question = { text: "Design a food rating system", category: "technical", difficulty: "medium" };
+    await collect(interviewer.streamTurn({ sessionId: "s1", text: "about the old one…", ...TURN, question, questionChanged: true }));
+    expect(seen.slice(-2)).toEqual(["system", "human"]);
+    expect(await interviewer.history("s1")).toEqual([
+      { role: "candidate", text: "about the old one…" },
+      { role: "interviewer", text: "Let's move on to a new question: food rating." },
+    ]);
+  });
+
   it("keeps the words the model wrote before a tool call, live and in the history", async () => {
     const model = fakeModel()
       .respond(new AIMessage({ content: "Let me run your code.", tool_calls: [{ id: "c1", name: "read_candidate_code", args: {} }] }))

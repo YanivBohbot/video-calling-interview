@@ -180,6 +180,20 @@ describe("practice service — messages", () => {
       expect(await questionSent()).toEqual({ text: "Two sum", category: "technical", difficulty: "easy" });
     });
 
+    it("flags the turn where the interviewer switched to another question, and only that one", async () => {
+      interviews["iv-1"] = { ...INTERVIEW, questions: [STORY, TWO_SUM] };
+      const turn = async () => {
+        interviewer.streamTurn.mockClear();
+        await drain(await send());
+        return interviewer.streamTurn.mock.calls[0][0].questionChanged;
+      };
+      expect(await turn()).toBe(false); // first turn: the agent presents it anyway
+      expect(await turn()).toBe(false);
+      asked.set("iv-1", { index: 0, text: STORY.text, category: "behavioral", difficulty: "easy" });
+      expect(await turn()).toBe(true);
+      expect(await turn()).toBe(false);
+    });
+
     it("else none: the agent finds its own problem", async () => {
       interviews["iv-1"] = { ...INTERVIEW, questions: [STORY] };
       expect(await questionSent()).toBeNull();

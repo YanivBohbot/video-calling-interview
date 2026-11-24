@@ -7,7 +7,7 @@ import {
   createEndSessionTool,
 } from "../tools/index.js";
 import { turnLimits, isLimitMessage, withFallback, createLoggingMiddleware } from "../middleware/index.js";
-import { buildInterviewerPrompt } from "./prompts.js";
+import { buildInterviewerPrompt, buildQuestionSwitchNote } from "./prompts.js";
 import { threadOf, textOf } from "./messages.js";
 import { repairUnansweredToolCalls } from "./repair.js";
 import { toTurnEvents } from "./events.js";
@@ -62,10 +62,13 @@ export const createPracticeInterviewer = ({
 
   // One candidate message → token / tool / done events (see events.js).
   // Aborting `signal` (candidate disconnected) stops the loop; the iteration then throws.
-  async function* streamTurn({ sessionId, text, code, language, role, interviewType, question = null, signal }) {
+  // `questionChanged`: the human interviewer switched question since the last turn.
+  async function* streamTurn({ sessionId, text, code, language, role, interviewType, question = null, questionChanged = false, signal }) {
     await repairUnansweredToolCalls(agent, sessionId);
+    const messages = [{ role: "user", content: text }];
+    if (question && questionChanged) messages.unshift({ role: "system", content: buildQuestionSwitchNote(question) });
     const stream = await agent.stream(
-      { messages: [{ role: "user", content: text }] },
+      { messages },
       {
         ...threadOf(sessionId),
         context: { sessionId, role, interviewType, code, language, question },

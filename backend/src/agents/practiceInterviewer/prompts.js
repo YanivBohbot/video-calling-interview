@@ -37,3 +37,15 @@ ${opening(question)}- Let the candidate think and code. Keep your replies short 
 - Call end_session when they have solved and discussed the problem, give up, or ask to stop,
   then say a short, neutral goodbye: thank them and tell them the interviewer will follow up.
 - Answer in the candidate's language.`;
+
+// Put in the conversation right before the candidate's message on the turn where the human
+// interviewer switched question: next to the message it beats the conversation's pull (the
+// candidate may still be answering the previous question). history() never shows it.
+export const buildQuestionSwitchNote = (question) => `The human interviewer has just switched to a new question.
+In your reply, first tell the candidate the interviewer has moved on to a new question, then present it.
+Do not keep discussing the previous question.
+
+The new question (${question.category}, ${question.difficulty}):
+"""
+${question.text}
+"""`;

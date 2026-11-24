@@ -28,6 +28,9 @@ export const createPracticeService = ({
   // both start from the same checkpoint and one exchange would be lost. (Process-local,
   // like the rate limiters.)
   const replying = new Set();
+  // The question each session's last turn was about, so the turn where the interviewer
+  // switched to another one is flagged to the agent (process-local, like `replying`).
+  const lastQuestion = new Map();
   const isOver = (session) => now() - new Date(session.startedAt).getTime() >= SESSION_MS;
 
   // The interview, if the caller may see its AI: its invited candidate or its owner.
@@ -149,6 +152,11 @@ export const createPracticeService = ({
       throw err;
     }
 
+    const question = questionFor(interview);
+    const questionText = question?.text ?? null;
+    const questionChanged = lastQuestion.has(session.id) && lastQuestion.get(session.id) !== questionText;
+    lastQuestion.set(session.id, questionText);
+
     const turn = interviewer.streamTurn({
       sessionId: session.id,
       text,
@@ -156,7 +164,8 @@ export const createPracticeService = ({
       language,
       role: interview.role ?? "",
       interviewType: interview.interviewType ?? "technical",
-      question: questionFor(interview),
+      question,
+      questionChanged,
       signal,
     });
     return (async function* () {
