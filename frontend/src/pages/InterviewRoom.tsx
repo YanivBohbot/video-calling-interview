@@ -21,6 +21,7 @@ import Whiteboard from '../components/Whiteboard';
 import type { Question } from '../lib/questions';
 import QuestionsPanel from '../components/QuestionsPanel';
 import { AiInterviewerPanel } from '../components/ai/AiInterviewerPanel';
+import { useAiAutoOpen } from '../lib/useAiAutoOpen';
 
 // The AI question generator, opened from the room's question list (interviewer only).
 // Approved/saved questions replace the room's list right away.
@@ -158,6 +159,13 @@ export const InterviewRoom: React.FC = () => {
   // The backend only returns this interview to its owner, so once it has loaded the
   // viewer is the interviewer. (Candidates use the separate /room page.)
   const isInterviewer = interviewData !== null;
+
+  // The candidate already started the AI interviewer: show it without a click.
+  const openAi = React.useCallback(() => {
+    setAiOpened(true);
+    setShowAi(true);
+  }, []);
+  useAiAutoOpen(apiFetch, id || '', isInterviewer, openAi);
 
   // Candidate invite: created on demand; creating a new one disables the previous link.
   const [inviteLink, setInviteLink] = React.useState<string | null>(null);

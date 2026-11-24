@@ -5,6 +5,13 @@ import type { AiMessage, TurnEvent } from './aiInterviewer';
 // closes it (the model's next words are a new message, as in the saved history).
 export type ChatState = { messages: AiMessage[]; open: boolean };
 
+// Sent for the candidate when they start a session, so the agent opens the conversation.
+export const OPENING_MESSAGE = "Hi, I'm ready to start.";
+
+// The chat as shown: without that automatic first message, which nobody typed.
+export const withoutOpening = (messages: AiMessage[]) =>
+  messages[0]?.role === 'candidate' && messages[0].text === OPENING_MESSAGE ? messages.slice(1) : messages;
+
 // Same history? A poll that brings nothing new must not re-render (or re-scroll) the chat.
 export const sameMessages = (a: AiMessage[], b: AiMessage[]) =>
   a.length === b.length && a.every((m, i) => m.role === b[i].role && m.text === b[i].text);

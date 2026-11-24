@@ -18,9 +18,9 @@ export const PracticeReportSchema = z.object({
     )
     .describe("Only tests you actually ran with run_code"),
   complexity: z.object({
-    time: z.string().describe("Time complexity of the final code"),
-    space: z.string().describe("Space complexity of the final code"),
-    comment: z.string().describe("Whether it can be improved, and how"),
+    time: z.string().describe("Time complexity of the final code, Big-O notation only (e.g. O(n log n)); explain in comment"),
+    space: z.string().describe("Space complexity of the final code, Big-O notation only (e.g. O(n)); explain in comment"),
+    comment: z.string().describe("What n and the other variables are, whether it can be improved, and how"),
   }),
   nextSteps: z.array(z.string()).describe("What to practice next"),
 });

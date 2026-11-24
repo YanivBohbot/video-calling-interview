@@ -14,6 +14,7 @@ import '@stream-io/video-react-sdk/dist/css/styles.css';
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import Whiteboard from '../components/Whiteboard';
 import { AiInterviewerPanel } from '../components/ai/AiInterviewerPanel';
+import { useAiAutoOpen } from '../lib/useAiAutoOpen';
 import { useApi } from '../lib/api';
 import { readInvite, storeInvite } from '../lib/storage';
 
@@ -72,6 +73,12 @@ export const CandidateRoom: React.FC = () => {
     codeRef.current = { code, language };
   }, []);
   const getCode = React.useCallback(() => codeRef.current, []);
+  // A session already exists (the room was reloaded): show it without a click.
+  const openAi = React.useCallback(() => {
+    setAiOpened(true);
+    setShowAi(true);
+  }, []);
+  useAiAutoOpen(apiFetch, id, status === 'ready', openAi);
 
   React.useEffect(() => {
     if (!invite) return;

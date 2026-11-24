@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiFetch } from './api';
 import { AiApiError, createAiInterviewerApi, type AiSession } from './aiInterviewer';
-import { addCandidateMessage, applyTurnEvent, sameMessages, type ChatState } from './aiChat';
+import { addCandidateMessage, applyTurnEvent, sameMessages, withoutOpening, OPENING_MESSAGE, type ChatState } from './aiChat';
 import { pollStep, type PollState } from './aiPolling';
 
 export type AiRole = 'candidate' | 'interviewer';
 export type AiPhase = 'loading' | 'idle' | 'active' | 'finished';
 
 const POLL_MS = 3000;
-// The candidate's first message: the backend starts a silent session, the agent opens on it.
-const OPENING_MESSAGE = "Hi, I'm ready to start.";
 const UNAVAILABLE = 'The AI interviewer is unavailable right now.';
 
 const messageOf = (err: unknown) => (err instanceof AiApiError ? err.message : UNAVAILABLE);
@@ -179,10 +177,13 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
     tick();
   }, [tick]);
 
+  // Memoized: a new array each render would re-scroll the chat on every poll.
+  const messages = useMemo(() => withoutOpening(chat.messages), [chat.messages]);
+
   return {
     phase,
     session,
-    messages: chat.messages,
+    messages,
     replying,
     error: error ?? pollError,
     reportWaitOver,
