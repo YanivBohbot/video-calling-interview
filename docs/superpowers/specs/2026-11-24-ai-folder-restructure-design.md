@@ -76,3 +76,20 @@ anything that would change behaviour is listed for the user before being touched
   `tests/http/questions.test.js` import from `src/ai/...`.
 - `CLAUDE.md` and the READMEs describe the new layout. Old docs under `docs/superpowers/`
   are history and are not rewritten.
+
+## Conformance findings (2026-11-24, langchain 1.5.4, @langchain/langgraph 1.4.21)
+
+Checked against docs.langchain.com/oss/javascript (agents, runtime, tools, middleware,
+structured output, Graph API, interrupts, persistence). No change needed.
+
+| Point | Code | Verdict |
+|---|---|---|
+| Agents | `createAgent({ model, tools, contextSchema, checkpointer, middleware })` | conformant |
+| Dynamic prompt | `dynamicSystemPromptMiddleware((state, runtime) => …runtime.context)` | conformant |
+| Runtime context | per call via `{ context }`, read in tools as `runtime.context`; never checkpointed | conformant |
+| Tools | `tool(fn, { name, description, schema: zod })` from `langchain`, every field `.describe()`d | conformant |
+| Structured output | `responseFormat: toolStrategy(schema)`, read from `structuredResponse` | conformant |
+| Middleware | built-in `modelCallLimitMiddleware` / `toolCallLimitMiddleware` / `modelFallbackMiddleware`; own `createMiddleware` with `wrapModelCall` / `wrapToolCall` | conformant (the coach's wrap-only budget is a documented workaround for the langchain 1.5 structured-retry issue) |
+| Workflow | `new StateGraph(StateSchema, contextSchema)`, `Command` + `ends`, `retryPolicy`, compiled by the caller | conformant |
+| Human approval | `interrupt()` first in the node, resumed with `Command({ resume })`, one thread per job | conformant |
+| Persistence | `PostgresSaver` (own schema) + `MemorySaver` in tests | conformant |
