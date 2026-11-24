@@ -20,54 +20,55 @@ describe("AI wiring", () => {
     expect(update).toHaveBeenCalledWith({ where: { id: "iv-1" }, data: { questions: [{ text: "Q" }] }, select: { id: true } });
   });
 
-  it("agents never import Prisma or read process.env", async () => {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const dir = path.resolve(import.meta.dirname, "../../ai");
-    const files = fs.readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".js") && !f.endsWith(".test.js"));
-    for (const f of files) {
-      const code = fs.readFileSync(path.join(dir, f), "utf8");
-      expect(code, f).not.toMatch(/lib\/db\.js|process\.env/);
-    }
-  });
-
-  it("agents never import integrations/ (clients are injected by container.js)", async () => {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const dir = path.resolve(import.meta.dirname, "../../ai");
-    const files = fs.readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".js"));
-    for (const f of files) {
-      const code = fs.readFileSync(path.join(dir, f), "utf8");
-      expect(code, f).not.toMatch(/integrations\//);
-    }
-  });
-
-  // Every .js file outside agents/ and the agents' own tests (tests/agents/ may reach internals).
-  const backendFilesOutsideAgents = async () => {
+  // Every .js file under src/ (paths with "/" on every OS), with its code.
+  const sourceFiles = async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
     const src = path.resolve(import.meta.dirname, "../..");
     return fs
       .readdirSync(src, { recursive: true })
       .map((f) => f.split(path.sep).join("/"))
-      .filter((f) => f.endsWith(".js") && !f.startsWith("ai/") && !f.startsWith("tests/ai/"))
+      .filter((f) => f.endsWith(".js"))
       .map((f) => ({ f, code: fs.readFileSync(path.join(src, f), "utf8") }));
   };
+  const importsOf = (code) => [...code.matchAll(/(?:from|import)\s*\(?\s*"([^"]+)"/g)].map(([, target]) => target);
+  const aiFiles = async () => (await sourceFiles()).filter(({ f }) => f.startsWith("ai/"));
+  // Outside ai/ and the AI tests (tests/ai/ may reach internals).
+  const filesOutsideAi = async () =>
+    (await sourceFiles()).filter(({ f }) => !f.startsWith("ai/") && !f.startsWith("tests/ai/"));
 
-  it.each(["workflows/questionGenerator", "agents/interviewer", "agents/coach"])(
-    "the rest of the backend reaches %s only through its index.js",
-    async (agent) => {
-      for (const { f, code } of await backendFilesOutsideAgents()) {
-        for (const [, target] of code.matchAll(new RegExp(`from "([^"]*ai/${agent}[^"]*)"`, "g"))) {
-          expect(target, f).toMatch(new RegExp(`ai/${agent}/index[.]js$`));
+  it("nothing in ai/ imports Prisma or reads process.env", async () => {
+    for (const { f, code } of await aiFiles()) expect(code, f).not.toMatch(/lib\/db\.js|process\.env/);
+  });
+
+  it("nothing in ai/ imports integrations/ (clients are injected by container.js)", async () => {
+    for (const { f, code } of await aiFiles()) expect(code, f).not.toMatch(/integrations\//);
+  });
+
+  it.each(["agents/interviewer", "agents/coach", "workflows/questionGenerator"])(
+    "the rest of the backend reaches ai/%s only through its index.js",
+    async (unit) => {
+      for (const { f, code } of await filesOutsideAi()) {
+        for (const target of importsOf(code).filter((t) => t.includes(`ai/${unit}`))) {
+          expect(target, f).toMatch(new RegExp(`ai/${unit}/index[.]js$`));
         }
       }
     },
   );
 
-  it("shared tools and middleware are used by agents only", async () => {
-    for (const { f, code } of await backendFilesOutsideAgents()) {
-      expect(code, f).not.toMatch(/from "[^"]*ai\/(tools|middleware|prompts)\//);
+  it("outside code imports ai/ only through an agent or workflow index.js, or ai/checkpointer.js", async () => {
+    for (const { f, code } of await filesOutsideAi()) {
+      for (const target of importsOf(code).filter((t) => /(^|\/)ai\//.test(t))) {
+        expect(target, f).toMatch(/ai\/(agents|workflows)\/[^/]+\/index\.js$|ai\/checkpointer\.js$/);
+      }
+    }
+  });
+
+  it("tools, prompts and middleware never import an agent or a workflow", async () => {
+    const shared = (await aiFiles()).filter(({ f }) => /^ai\/(tools|prompts|middleware)\//.test(f));
+    expect(shared.length).toBeGreaterThan(0);
+    for (const { f, code } of shared) {
+      for (const target of importsOf(code)) expect(target, f).not.toMatch(/(agents|workflows)\//);
     }
   });
 
