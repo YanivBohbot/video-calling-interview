@@ -29,7 +29,7 @@ ai/
 | | Tools | Prompts | Middleware | Checkpointer |
 |---|---|---|---|---|
 | `agents/interviewer` | find_problem, read_candidate_code, run_code, end_session, present_question (avatar mode) | `prompts/interviewer.js` (dynamic, per call) | turnLimits, withFallback, logging | yes, thread `practice:<sessionId>` |
-| `agents/coach` | run_code, read_candidate_code | `prompts/coach.js` | createCallBudget, requireToolBeforeResponse(run_code), withFallback, logging | no (one invoke per report) |
+| `agents/coach` | run_code, read_candidate_code | `prompts/coach.js` | createCallBudget, requireToolBeforeResponse(run_code) (only when the candidate wrote code), withFallback, logging | no (one invoke per report) |
 | `workflows/questionGenerator` | — (the code runs the LeetCode search) | `prompts/questionGenerator.js` | — | yes, one thread per job |
 
 ## Rules (enforced by `src/tests/architecture/aiWiring.test.js`)

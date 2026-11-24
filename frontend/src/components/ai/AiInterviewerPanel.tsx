@@ -53,6 +53,11 @@ export const AiInterviewerPanel: React.FC<{
         <span className="flex items-center gap-2 text-sm font-medium">
           <Bot size={16} className="text-violet-300" />
           {isCandidate ? 'AI interviewer' : "AI interviewer — candidate's session"}
+          {ai.session?.mode === 'avatar' && (
+            <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-300">
+              Avatar interview
+            </span>
+          )}
         </span>
         {ai.phase === 'active' && (
           <button
