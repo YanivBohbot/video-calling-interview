@@ -72,4 +72,32 @@ describe('AI interviewer API', () => {
     const apiFetch = vi.fn(async () => json(201, { id: 's9', status: 'active', language: 'python' }));
     expect(await createAiInterviewerApi(apiFetch, 'iv-1').start('python')).toBe('s9');
   });
+
+  it('start sends the mode (text unless asked)', async () => {
+    const apiFetch = vi.fn(async () => json(201, { id: 's9' }));
+    const api = createAiInterviewerApi(apiFetch, 'iv-1');
+    await api.start('python');
+    await api.start('python', 'avatar');
+    const bodies = (apiFetch.mock.calls as unknown as [string, RequestInit][]).map(([, init]) => init.body);
+    expect(bodies).toEqual([JSON.stringify({ language: 'python', mode: 'text' }), JSON.stringify({ language: 'python', mode: 'avatar' })]);
+  });
+
+  it('avatarToken posts to the session and returns the token', async () => {
+    const apiFetch = vi.fn(async () => json(200, { sessionToken: 'tok', language: 'he' }));
+    expect(await createAiInterviewerApi(apiFetch, 'iv-1').avatarToken('s1')).toEqual({ sessionToken: 'tok', language: 'he' });
+    const [path, init] = apiFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(path).toBe('/api/interviews/iv-1/ai/sessions/s1/avatar-token');
+    expect(init.method).toBe('POST');
+  });
+
+  it('send turns a question event into the question on screen', async () => {
+    const apiFetch = vi.fn(async () =>
+      sse('event: question\ndata: {"index":2,"text":"Tell me about a conflict","category":"behavioral","difficulty":"easy"}\n\n'),
+    );
+    const events: TurnEvent[] = [];
+    await createAiInterviewerApi(apiFetch, 'iv-1').send('s1', BODY, (e) => events.push(e));
+    expect(events).toEqual([
+      { type: 'question', question: { index: 2, text: 'Tell me about a conflict', category: 'behavioral', difficulty: 'easy' } },
+    ]);
+  });
 });

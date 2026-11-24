@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addCandidateMessage, applyTurnEvent, sameMessages, withoutOpening, OPENING_MESSAGE, type ChatState } from './aiChat';
+import { addCandidateMessage, applyTurnEvent, sameMessages, withoutOpening, OPENING_MESSAGE, AVATAR_OPENING_MESSAGE, type ChatState } from './aiChat';
 
 describe('sameMessages', () => {
   it('tells an unchanged history from a new one (so a poll does not re-render the chat)', () => {
@@ -17,6 +17,12 @@ describe('withoutOpening', () => {
     expect(withoutOpening([opening, reply])).toEqual([reply]);
     expect(withoutOpening([reply, opening])).toEqual([reply, opening]);
     expect(withoutOpening([])).toEqual([]);
+  });
+
+  it("hides the avatar interview's opening too", () => {
+    const opening = { role: 'candidate' as const, text: AVATAR_OPENING_MESSAGE };
+    const reply = { role: 'interviewer' as const, text: 'Welcome to your interview' };
+    expect(withoutOpening([opening, reply])).toEqual([reply]);
   });
 });
 

@@ -1,5 +1,6 @@
 import type { ApiFetch } from './api';
 import { createSseParser } from './sse';
+import type { AskedQuestion } from './questions';
 
 // The AI interviewer of an interview room: /api/interviews/:id/ai on the backend.
 // No React here — the room's hook (useAiInterviewer) holds the state.
@@ -18,8 +19,12 @@ export type AiReport = {
 
 export type ReportStatus = 'none' | 'pending' | 'ready' | 'failed';
 
+// 'avatar': the candidate runs the whole interview with the LiveAvatar avatar voicing the agent.
+export type AiMode = 'text' | 'avatar';
+
 export type AiSession = {
   id: string;
+  mode: AiMode;
   status: 'active' | 'finished';
   language: string;
   code: string | null;
@@ -28,11 +33,15 @@ export type AiSession = {
   messages: AiMessage[];
   reportStatus: ReportStatus;
   report: AiReport | null;
+  // Avatar mode: the question the avatar is asking (null before the first one).
+  presentedQuestion?: AskedQuestion | null;
 };
 
 export type TurnEvent =
   | { type: 'token'; text: string }
   | { type: 'tool'; name: string }
+  // Avatar mode: the agent moved to this question of the interview.
+  | { type: 'question'; question: AskedQuestion }
   | { type: 'done'; ended: boolean; limited: boolean }
   | { type: 'error'; message: string };
 
@@ -57,6 +66,17 @@ const toTurnEvent = (event: string, data: unknown): TurnEvent | null => {
   const d = (data ?? {}) as Record<string, unknown>;
   if (event === 'token') return { type: 'token', text: String(d.text ?? '') };
   if (event === 'tool') return { type: 'tool', name: String(d.name ?? '') };
+  if (event === 'question') {
+    return {
+      type: 'question',
+      question: {
+        index: Number(d.index),
+        text: String(d.text ?? ''),
+        category: d.category as AskedQuestion['category'],
+        difficulty: d.difficulty as AskedQuestion['difficulty'],
+      },
+    };
+  }
   if (event === 'done') return { type: 'done', ended: d.ended === true, limited: d.limited === true };
   if (event === 'error') return { type: 'error', message: String(d.message ?? 'The interviewer is unavailable right now.') };
   return null;
@@ -80,7 +100,13 @@ export const createAiInterviewerApi = (apiFetch: ApiFetch, interviewId: string) 
     // The interview's session (null before it starts): one per interview.
     current: async () => (await request<{ sessionId: string | null }>(`${base}/current`, undefined)).sessionId,
 
-    start: async (language: string) => (await request<{ id: string }>(base, post({ language }))).id,
+    // `language`: the editor's language (javascript, python…), not the interview's.
+    start: async (language: string, mode: AiMode = 'text') => (await request<{ id: string }>(base, post({ language, mode }))).id,
+
+    // A short-lived LiveAvatar token for an active avatar session (also to reconnect a dropped
+    // avatar). `language`: the interview's (en / he).
+    avatarToken: (sessionId: string) =>
+      request<{ sessionToken: string; language: string }>(`${base}/${encodeURIComponent(sessionId)}/avatar-token`, post()),
 
     get: (sessionId: string) => request<AiSession>(`${base}/${encodeURIComponent(sessionId)}`, undefined),
 
