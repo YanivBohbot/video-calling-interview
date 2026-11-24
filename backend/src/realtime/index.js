@@ -25,6 +25,7 @@ const EVENTS = {
 //   findCodeSnapshot  — (interviewId) → { codeSnapshot, codeLanguage } | null
 //   authenticator     — Socket.io middleware setting socket.data.principal (see authenticateSocket.js)
 //   canAccessRoom     — (principal, roomId) → Promise<boolean>
+//   roomQuestions     — Map roomId → the question on screen; shared with the AI interviewer
 export const attachRealtime = ({
   httpServer,
   clientUrl,
@@ -32,6 +33,7 @@ export const attachRealtime = ({
   findCodeSnapshot,
   authenticator,
   canAccessRoom,
+  roomQuestions = new Map(),
   flushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS,
 }) => {
   const io = new Server(httpServer, {
@@ -39,9 +41,8 @@ export const attachRealtime = ({
   });
 
   const roomState = new Map();
-  // Kept apart from roomState: creating a roomState entry would make rejoiners receive
-  // empty code instead of the persisted snapshot.
-  const roomQuestions = new Map();
+  // roomQuestions is kept apart from roomState: creating a roomState entry would make
+  // rejoiners receive empty code instead of the persisted snapshot.
 
   // Every connection must present a credential.
   io.use(authenticator);

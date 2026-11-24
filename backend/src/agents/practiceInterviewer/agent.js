@@ -26,6 +26,8 @@ const contextSchema = z.object({
   interviewType: z.string(),
   code: z.string(),
   language: z.string(),
+  // The interview's question, or null: the agent then finds its own problem.
+  question: z.object({ text: z.string(), category: z.string(), difficulty: z.string() }).nullable(),
 });
 
 // The practice interviewer: a ReAct agent (createAgent) that talks with the candidate,
@@ -60,13 +62,13 @@ export const createPracticeInterviewer = ({
 
   // One candidate message → token / tool / done events (see events.js).
   // Aborting `signal` (candidate disconnected) stops the loop; the iteration then throws.
-  async function* streamTurn({ sessionId, text, code, language, role, interviewType, signal }) {
+  async function* streamTurn({ sessionId, text, code, language, role, interviewType, question = null, signal }) {
     await repairUnansweredToolCalls(agent, sessionId);
     const stream = await agent.stream(
       { messages: [{ role: "user", content: text }] },
       {
         ...threadOf(sessionId),
-        context: { sessionId, role, interviewType, code, language },
+        context: { sessionId, role, interviewType, code, language, question },
         recursionLimit: RECURSION_LIMIT,
         streamMode: ["messages", "updates"],
         signal,

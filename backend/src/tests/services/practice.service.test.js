@@ -18,6 +18,8 @@ let interviewer;
 let coach;
 let limiter;
 let background;
+let asked;
+let interviews;
 let service;
 
 const drain = async (events) => {
@@ -46,9 +48,12 @@ beforeEach(() => {
   coach = { review: vi.fn(async () => ({ summary: "ok" })) };
   limiter = { check: vi.fn(() => ({ ok: true })) };
   background = [];
+  asked = new Map();
+  interviews = { "iv-1": INTERVIEW };
   service = createPracticeService({
     practiceSessionRepository: repo,
-    interviewRepository: { findById: vi.fn(async (id) => (id === "iv-1" ? INTERVIEW : null)) },
+    interviewRepository: { findById: vi.fn(async (id) => interviews[id] ?? null) },
+    askedQuestionOf: (interviewId) => asked.get(interviewId),
     interviewer,
     coach,
     messageLimiter: limiter,
@@ -154,6 +159,31 @@ describe("practice service — messages", () => {
       expect.objectContaining({ sessionId: "s1", text: "hello", code: "print(1)", language: "python", role: "Backend", interviewType: "technical" }),
     );
     expect(events.at(-1)).toEqual({ type: "done", ended: false, limited: false });
+  });
+
+  describe("the question the AI interviewer asks", () => {
+    const TWO_SUM = { text: "Two sum", category: "technical", difficulty: "easy", source: { slug: "two-sum" } };
+    const STORY = { text: "Tell me about a conflict", category: "behavioral", difficulty: "easy" };
+    const questionSent = async () => {
+      await drain(await send());
+      return interviewer.streamTurn.mock.calls[0][0].question;
+    };
+
+    it("is the one the interviewer put on screen (Ask)", async () => {
+      interviews["iv-1"] = { ...INTERVIEW, questions: [STORY, TWO_SUM] };
+      asked.set("iv-1", { index: 0, text: STORY.text, category: "behavioral", difficulty: "easy" });
+      expect(await questionSent()).toEqual({ text: STORY.text, category: "behavioral", difficulty: "easy" });
+    });
+
+    it("else the interview's first technical question, without its LeetCode source", async () => {
+      interviews["iv-1"] = { ...INTERVIEW, questions: [STORY, TWO_SUM] };
+      expect(await questionSent()).toEqual({ text: "Two sum", category: "technical", difficulty: "easy" });
+    });
+
+    it("else none: the agent finds its own problem", async () => {
+      interviews["iv-1"] = { ...INTERVIEW, questions: [STORY] };
+      expect(await questionSent()).toBeNull();
+    });
   });
 
   it("answers 409 once the session is finished", async () => {

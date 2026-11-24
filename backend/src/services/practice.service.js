@@ -10,7 +10,8 @@ export const MAX_MESSAGES = 60;
 // The AI interviewer of an interview room. The invited candidate of the interview talks to
 // it; the interview's owner follows the conversation and alone reads the report. Anyone
 // else gets 404. The agents are injected: `interviewer` ({ streamTurn, history }) and `coach`
-// ({ review }). The report is written in the background once a session ends;
+// ({ review }). `askedQuestionOf(interviewId)`: the question the interviewer put on screen
+// in the room (realtime), if any. The report is written in the background once a session ends;
 // `runInBackground` is injectable so tests can await it.
 export const createPracticeService = ({
   practiceSessionRepository: sessions,
@@ -18,6 +19,7 @@ export const createPracticeService = ({
   interviewer,
   coach,
   messageLimiter,
+  askedQuestionOf = () => undefined,
   now = () => Date.now(),
   runInBackground = (fn) => void fn(),
 }) => {
@@ -46,6 +48,15 @@ export const createPracticeService = ({
     const session = await sessions.findById(sessionId);
     if (!session || session.interviewId !== interviewId) throw notFound();
     return { interview, session };
+  };
+
+  // The question the AI interviewer asks: the one on screen (Ask), else the interview's first
+  // technical question, else none (the agent finds a problem). Never its LeetCode source.
+  const questionFor = (interview) => {
+    const pick =
+      askedQuestionOf(interview.id) ??
+      (Array.isArray(interview.questions) ? interview.questions : []).find((q) => q?.category === "technical");
+    return pick ? { text: pick.text, category: pick.category, difficulty: pick.difficulty } : null;
   };
 
   const writeReport = async (sessionId) => {
@@ -145,6 +156,7 @@ export const createPracticeService = ({
       language,
       role: interview.role ?? "",
       interviewType: interview.interviewType ?? "technical",
+      question: questionFor(interview),
       signal,
     });
     return (async function* () {

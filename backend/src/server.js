@@ -26,6 +26,7 @@ const realtime = attachRealtime({
   findCodeSnapshot: container.repositories.interview.findCodeSnapshot,
   authenticator: createSocketAuthenticator(container.auth.resolver),
   canAccessRoom: createRoomAccess({ interviewRepository: container.repositories.interview }),
+  roomQuestions: container.realtime.roomQuestions,
 });
 
 let shuttingDown = false;

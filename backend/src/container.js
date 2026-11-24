@@ -198,6 +198,9 @@ export const createContainer = ({
       rateLimiter: createRateLimiter({ max: CODE_RUNS_PER_MINUTE, windowMs: ONE_MINUTE_MS }),
     }),
   };
+  // The question each room's interviewer put on screen (Ask). Shared with the realtime
+  // channel (server.js), which writes it; the AI interviewer reads it.
+  const roomQuestions = new Map();
   services.practice = createPracticeService({
     practiceSessionRepository: repositories.practiceSession,
     interviewRepository: repositories.interview,
@@ -207,6 +210,7 @@ export const createContainer = ({
     },
     coach: { review: (args) => getPracticeAgents().coach.review(args) },
     messageLimiter: createRateLimiter({ max: PRACTICE_MESSAGES_PER_MINUTE, windowMs: ONE_MINUTE_MS }),
+    askedQuestionOf: (interviewId) => roomQuestions.get(interviewId),
     now,
   });
 
@@ -234,5 +238,5 @@ export const createContainer = ({
     practice: createPracticeRouter({ practiceController: controllers.practice }),
   };
 
-  return { config, prisma, auth, ai, repositories, services, controllers, routers };
+  return { config, prisma, auth, ai, repositories, services, controllers, routers, realtime: { roomQuestions } };
 };
