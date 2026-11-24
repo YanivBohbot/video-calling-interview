@@ -3,7 +3,7 @@ import {
   StreamVideo,
   StreamVideoClient,
   StreamCall,
-  SpeakerLayout,
+  PaginatedGridLayout,
   CallControls,
   StreamTheme,
   type Call,
@@ -214,7 +214,7 @@ export const CandidateRoom: React.FC = () => {
               <div className="w-1/3 h-full flex flex-col gap-2 p-2 overflow-hidden">
                 <div className="h-[42%] min-h-[14rem] shrink-0 bg-slate-900 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex flex-col">
                   <div className="flex-1 min-h-0">
-                    <SpeakerLayout />
+                    <PaginatedGridLayout groupSize={4} pageArrowsVisible={false} />
                   </div>
                   <div className="h-16 bg-slate-800/80 backdrop-blur-md border-t border-white/10 flex items-center justify-center">
                     <CallControls onLeave={leave} />
