@@ -49,8 +49,8 @@ export const createPracticeCoach = ({ model, fallbackModel, runCode, languages, 
       middleware: [
         // Not turnLimits(): its after_model hooks break the structured-answer retry (see budget.js).
         createCallBudget({ modelCalls: MODEL_CALLS, toolCalls: TOOL_CALLS }),
-        // No report before at least one real run of the candidate's code.
-        requireToolBeforeResponse({ tool: "run_code" }),
+        // No report before at least one real run of the candidate's code (if there is any).
+        ...(candidateCode ? [requireToolBeforeResponse({ tool: "run_code" })] : []),
         ...withFallback(fallbackModel),
         createLoggingMiddleware({ agent: "practiceCoach", log }),
       ],

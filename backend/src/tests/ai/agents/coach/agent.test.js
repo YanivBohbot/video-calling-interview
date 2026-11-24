@@ -100,6 +100,22 @@ describe("practice coach agent", () => {
     );
   });
 
+  it("reports on a behavioral-only session (no code) without running anything", async () => {
+    const model = fakeModel().respondWithTools([{ name: REPORT_TOOL, args: report([]) }]);
+    const runCode = vi.fn();
+    const result = await createPracticeCoach({ model, runCode, languages: LANGUAGES }).review({
+      transcript: [
+        { role: "interviewer", text: "Tell me about a conflict in your team." },
+        { role: "candidate", text: "Situation: two devs disagreed on the API design..." },
+      ],
+      code: "",
+      language: "javascript",
+    });
+    expect(result.testsRun).toEqual([]);
+    expect(result.summary).toBe("Good start.");
+    expect(runCode).not.toHaveBeenCalled();
+  });
+
   it("sends the transcript and the final code to the model", async () => {
     const model = fakeModel()
       .respondWithTools([{ name: "run_code", args: { language: "python", code: onCandidateCode("print(1)") } }])
