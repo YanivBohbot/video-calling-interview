@@ -34,6 +34,7 @@ export const attachRealtime = ({
   authenticator,
   canAccessRoom,
   roomQuestions = new Map(),
+  roomOwners = new Map(),
   flushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS,
 }) => {
   const io = new Server(httpServer, {
@@ -49,7 +50,7 @@ export const attachRealtime = ({
 
   // Every question asked so far per room (the candidate's "Questions" menu).
   const askedQuestions = new Map();
-  const ctx = { io, roomState, roomQuestions, askedQuestions, interviewStore, findCodeSnapshot, canAccessRoom };
+  const ctx = { io, roomState, roomQuestions, roomOwners, askedQuestions, interviewStore, findCodeSnapshot, canAccessRoom };
   const handlers = Object.entries(EVENTS).map(([event, factory]) => [event, factory(ctx)]);
 
   io.on("connection", (socket) => {

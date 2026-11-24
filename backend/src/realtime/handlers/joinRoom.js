@@ -1,6 +1,8 @@
+import { isOwnerKind } from "../../auth/principal.js";
+import { addOwner, isOwnerPresent } from "../roomOwners.js";
 import { getCurrentQuestion, getAskedQuestions } from "../roomQuestions.js";
 
-export const createJoinRoomHandler = ({ roomState, roomQuestions, askedQuestions, findCodeSnapshot, canAccessRoom }) => (socket) => async (roomId) => {
+export const createJoinRoomHandler = ({ io, roomState, roomQuestions, askedQuestions, roomOwners, findCodeSnapshot, canAccessRoom }) => (socket) => async (roomId) => {
   // Owners may enter their own interviews' rooms, a candidate only the invited one.
   // Socket.io ignores a listener's promise, so a rejection here would be unhandled and
   // could take the whole process down: refuse instead.
@@ -17,6 +19,16 @@ export const createJoinRoomHandler = ({ roomState, roomQuestions, askedQuestions
   socket.join(roomId);
   socket.data.roomId = roomId;
   console.log(`User ${socket.id} joined room: ${roomId}`);
+
+  // Tell the room (and the newcomer) whether the interviewer is there. Only an owner's
+  // first socket changes it; a socket counts once even if it joins again.
+  if (isOwnerKind(socket.data.principal) && !socket.data.isOwner) {
+    socket.data.isOwner = true;
+    if (addOwner(roomOwners, roomId) === 1) io.to(roomId).emit("interviewer-presence", { present: true });
+    else socket.emit("interviewer-presence", { present: true });
+  } else {
+    socket.emit("interviewer-presence", { present: isOwnerPresent(roomOwners, roomId) });
+  }
 
   // Replay the current question first: the code-snapshot branch below may return early.
   const current = getCurrentQuestion(roomQuestions, roomId);
