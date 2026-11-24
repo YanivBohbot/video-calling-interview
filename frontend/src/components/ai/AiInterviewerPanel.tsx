@@ -6,7 +6,7 @@ import { AiReport } from './AiReport';
 import { AiMarkdown } from './AiMarkdown';
 
 const NOTICE =
-  'You are talking to an AI interviewer. Your code and messages are sent to OpenAI. The interviewer can read this conversation and the report.';
+  'You are talking to an AI interviewer. Your code and messages are sent to OpenAI. The interviewer sees this conversation and receives a report at the end. You have one session.';
 
 // The room's AI interviewer. The candidate chats with it about the code in the shared
 // editor (`getCode` reads the editor's latest content); the interviewer follows read-only.
@@ -95,7 +95,12 @@ export const AiInterviewerPanel: React.FC<{
           </p>
         )}
 
-        {ai.phase === 'finished' && ai.session && (
+        {ai.phase === 'finished' && ai.session && isCandidate && (
+          <p className="mt-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-300">
+            The AI interview is over. Thank you — the interviewer will follow up with you.
+          </p>
+        )}
+        {ai.phase === 'finished' && ai.session && !isCandidate && (
           <div className="mt-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-widest text-violet-300">Report</h3>
             <AiReport
@@ -105,14 +110,6 @@ export const AiInterviewerPanel: React.FC<{
               onCheckAgain={ai.checkReport}
               onRetry={() => void ai.retryReport()}
             />
-            {isCandidate &&
-              (ai.sessionsLeft === 0 ? (
-                <p className="text-xs text-slate-500">You have used every AI interviewer session of this interview.</p>
-              ) : (
-                <button onClick={start} className="text-xs text-slate-400 hover:text-white underline underline-offset-4">
-                  Start a new session{ai.sessionsLeft !== null && ` (${ai.sessionsLeft} left)`}
-                </button>
-              ))}
           </div>
         )}
 

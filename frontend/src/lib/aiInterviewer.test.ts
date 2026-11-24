@@ -47,14 +47,11 @@ describe('AI interviewer API', () => {
     expect(onEvent).not.toHaveBeenCalled();
   });
 
-  it('current returns the latest session id (or null) and the sessions left', async () => {
-    const apiFetch = vi
-      .fn()
-      .mockResolvedValueOnce(json(200, { sessionId: 's1', sessionsLeft: 2 }))
-      .mockResolvedValueOnce(json(200, { sessionId: null, sessionsLeft: 3 }));
+  it('current returns the latest session id, or null', async () => {
+    const apiFetch = vi.fn().mockResolvedValueOnce(json(200, { sessionId: 's1' })).mockResolvedValueOnce(json(200, { sessionId: null }));
     const api = createAiInterviewerApi(apiFetch, 'iv-1');
-    expect(await api.current()).toEqual({ sessionId: 's1', sessionsLeft: 2 });
-    expect(await api.current()).toEqual({ sessionId: null, sessionsLeft: 3 });
+    expect(await api.current()).toBe('s1');
+    expect(await api.current()).toBeNull();
     expect(apiFetch).toHaveBeenCalledWith('/api/interviews/iv-1/ai/sessions/current', undefined);
   });
 

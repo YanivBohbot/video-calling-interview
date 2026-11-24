@@ -1,14 +1,15 @@
 import { AppError, ConflictError, NotFoundError, RateLimitError } from "../shared/errors.js";
 import { CANDIDATE } from "../auth/principal.js";
 
-// Spec caps (starting values).
-export const MAX_SESSIONS_PER_INTERVIEW = 3;
+// Caps. One AI interview per interview: the candidate is evaluated once, and never sees
+// the report (it is the interviewer's), so there is nothing to retry their way.
+export const MAX_SESSIONS_PER_INTERVIEW = 1;
 export const SESSION_MS = 60 * 60 * 1000;
 export const MAX_MESSAGES = 60;
 
 // The AI interviewer of an interview room. The invited candidate of the interview talks to
-// it; the interview's owner follows the conversation and reads the report. Anyone else
-// gets 404. The agents are injected: `interviewer` ({ streamTurn, history }) and `coach`
+// it; the interview's owner follows the conversation and alone reads the report. Anyone
+// else gets 404. The agents are injected: `interviewer` ({ streamTurn, history }) and `coach`
 // ({ review }). The report is written in the background once a session ends;
 // `runInBackground` is injectable so tests can await it.
 export const createPracticeService = ({
@@ -29,12 +30,14 @@ export const createPracticeService = ({
 
   // The interview, if the caller may see its AI: its invited candidate or its owner.
   // `write` (start, send) is the candidate's alone.
-  const loadInterview = async (principal, interviewId, { write = false } = {}) => {
+  // `ownerOnly` (the report) is the interviewer's alone.
+  const loadInterview = async (principal, interviewId, { write = false, ownerOnly = false } = {}) => {
     const isCandidate = principal.kind === CANDIDATE;
     if (isCandidate && principal.interviewId !== interviewId) throw notFound();
     const interview = await interviewRepository.findById(interviewId);
     if (!interview || (!isCandidate && interview.interviewerId !== principal.userId)) throw notFound();
     if (write && !isCandidate) throw new AppError(403, "Only the candidate talks to the AI interviewer");
+    if (ownerOnly && isCandidate) throw new AppError(403, "Forbidden");
     return interview;
   };
 
@@ -73,7 +76,7 @@ export const createPracticeService = ({
     });
     if (result.closedId) runInBackground(() => writeReport(result.closedId));
     if (result.conflict === "active") throw new ConflictError("An AI interviewer session is already active");
-    if (result.conflict === "limit") throw new ConflictError("No AI interviewer sessions left for this interview");
+    if (result.conflict === "limit") throw new ConflictError("The AI interview of this interview has already taken place");
     return result.session;
   };
 
@@ -82,11 +85,9 @@ export const createPracticeService = ({
   const current = async (principal, interviewId) => {
     await loadInterview(principal, interviewId);
     const session = await sessions.findLatest(interviewId);
-    // `sessionsLeft`: the candidate can tell before clicking whether a new session is possible.
-    const sessionsLeft = Math.max(0, MAX_SESSIONS_PER_INTERVIEW - (session ? await sessions.countForInterview(interviewId) : 0));
-    if (!session) return { sessionId: null, sessionsLeft };
+    if (!session) return { sessionId: null };
     if (session.status === "active" && isOver(session)) await close(session.id);
-    return { sessionId: session.id, sessionsLeft };
+    return { sessionId: session.id };
   };
 
   const reportStatusOf = (session) => {
@@ -101,7 +102,8 @@ export const createPracticeService = ({
       await close(session.id); // time is up even if the candidate never wrote again
       session = { ...session, status: "finished" };
     }
-    const reportStatus = reportStatusOf(session);
+    // The candidate learns the session is over, nothing about the report.
+    const reportStatus = principal.kind === CANDIDATE ? "none" : reportStatusOf(session);
     return {
       id: session.id,
       status: session.status,
@@ -161,9 +163,9 @@ export const createPracticeService = ({
     })();
   };
 
-  // A report that failed (model down, timeout…) can be written again, by either side.
+  // A report that failed (model down, timeout…) can be written again, by the interviewer.
   const retryReport = async (principal, interviewId, sessionId) => {
-    const { session } = await loadSession(principal, interviewId, sessionId);
+    const { session } = await loadSession(principal, interviewId, sessionId, { ownerOnly: true });
     if (!(await sessions.claimReportRetry(session.id))) throw new ConflictError("There is no failed report to retry");
     runInBackground(() => writeReport(session.id));
     return { reportStatus: "pending" };

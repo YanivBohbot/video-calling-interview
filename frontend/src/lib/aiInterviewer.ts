@@ -77,8 +77,8 @@ export const createAiInterviewerApi = (apiFetch: ApiFetch, interviewId: string) 
   });
 
   return {
-    // The interview's latest session (null before any) and how many new ones may still start.
-    current: () => request<{ sessionId: string | null; sessionsLeft: number }>(`${base}/current`, undefined),
+    // The interview's session (null before it starts): one per interview.
+    current: async () => (await request<{ sessionId: string | null }>(`${base}/current`, undefined)).sessionId,
 
     start: async (language: string) => (await request<{ id: string }>(base, post({ language }))).id,
 
@@ -88,7 +88,7 @@ export const createAiInterviewerApi = (apiFetch: ApiFetch, interviewId: string) 
       await request(`${base}/${encodeURIComponent(sessionId)}/finish`, post());
     },
 
-    // Writes a failed report again (either side).
+    // Writes a failed report again (the interviewer only).
     retryReport: async (sessionId: string) => {
       await request(`${base}/${encodeURIComponent(sessionId)}/report`, post());
     },

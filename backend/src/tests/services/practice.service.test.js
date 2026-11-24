@@ -31,7 +31,6 @@ beforeEach(() => {
     startExclusive: vi.fn(async ({ interviewId, language }) => ({ session: { ...active(0), interviewId, language }, closedId: null })),
     findById: vi.fn(async () => active()),
     findLatest: vi.fn(async () => null),
-    countForInterview: vi.fn(async () => 0),
     claimReportRetry: vi.fn(async () => true),
     claimMessage: vi.fn(async () => true),
     finish: vi.fn(async () => true),
@@ -93,33 +92,25 @@ describe("practice service — access", () => {
 describe("practice service — current", () => {
   it("returns the interview's latest session id", async () => {
     repo.findLatest.mockResolvedValue(active(5));
-    repo.countForInterview.mockResolvedValue(1);
-    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: "s1", sessionsLeft: 2 });
-    expect(await service.current(OWNER, "iv-1")).toEqual({ sessionId: "s1", sessionsLeft: 2 });
+    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: "s1" });
+    expect(await service.current(OWNER, "iv-1")).toEqual({ sessionId: "s1" });
     expect(repo.findLatest).toHaveBeenCalledWith("iv-1");
-    expect(repo.countForInterview).toHaveBeenCalledWith("iv-1");
   });
 
   it("still returns a finished session, so a reloaded room shows its report", async () => {
     repo.findLatest.mockResolvedValue(active(5, { status: "finished", report: { summary: "ok" } }));
-    expect(await service.current(OWNER, "iv-1")).toMatchObject({ sessionId: "s1" });
+    expect(await service.current(OWNER, "iv-1")).toEqual({ sessionId: "s1" });
     expect(repo.finish).not.toHaveBeenCalled();
   });
 
   it("closes a session whose time is over, and still returns it", async () => {
     repo.findLatest.mockResolvedValue(active(61));
-    expect(await service.current(CANDIDATE, "iv-1")).toMatchObject({ sessionId: "s1" });
+    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: "s1" });
     expect(repo.finish).toHaveBeenCalledWith("s1");
   });
 
   it("returns null before any session", async () => {
-    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: null, sessionsLeft: 3 });
-  });
-
-  it("never reports fewer than 0 sessions left", async () => {
-    repo.findLatest.mockResolvedValue(active(5, { status: "finished" }));
-    repo.countForInterview.mockResolvedValue(4);
-    expect(await service.current(CANDIDATE, "iv-1")).toMatchObject({ sessionsLeft: 0 });
+    expect(await service.current(CANDIDATE, "iv-1")).toEqual({ sessionId: null });
   });
 });
 
@@ -127,7 +118,7 @@ describe("practice service — start", () => {
   it("starts a session atomically with the interview's caps", async () => {
     const session = await service.start(CANDIDATE, "iv-1", { language: "python" });
     expect(repo.startExclusive).toHaveBeenCalledWith({
-      interviewId: "iv-1", language: "python", max: 3, staleBefore: new Date(NOW - 60 * MIN),
+      interviewId: "iv-1", language: "python", max: 1, staleBefore: new Date(NOW - 60 * MIN),
     });
     expect(session.id).toBe("s1");
   });
@@ -147,9 +138,9 @@ describe("practice service — start", () => {
     expect(repo.saveReport).toHaveBeenCalledWith("s1", { summary: "ok" });
   });
 
-  it("refuses a 4th session on the same interview", async () => {
+  it("refuses a second session on the same interview (one AI interview per interview)", async () => {
     repo.startExclusive.mockResolvedValue({ conflict: "limit", closedId: null });
-    await expect(service.start(CANDIDATE, "iv-1", { language: "python" })).rejects.toMatchObject({ status: 409, message: "No AI interviewer sessions left for this interview" });
+    await expect(service.start(CANDIDATE, "iv-1", { language: "python" })).rejects.toMatchObject({ status: 409, message: "The AI interview of this interview has already taken place" });
   });
 });
 
@@ -227,21 +218,23 @@ describe("practice service — messages", () => {
 });
 
 describe("practice service — retrying a failed report", () => {
-  it("lets the candidate or the owner write the report again", async () => {
+  it("lets the owner write the report again", async () => {
     repo.findById.mockResolvedValue(active(5, { status: "finished", report: { failed: true } }));
     expect(await service.retryReport(OWNER, "iv-1", "s1")).toEqual({ reportStatus: "pending" });
     await settle();
     expect(repo.claimReportRetry).toHaveBeenCalledWith("s1");
     expect(coach.review).toHaveBeenCalledTimes(1);
     expect(repo.saveReport).toHaveBeenCalledWith("s1", { summary: "ok" });
-    await service.retryReport(CANDIDATE, "iv-1", "s1");
-    await settle();
-    expect(coach.review).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses the candidate (403): the report is the interviewer's", async () => {
+    await expect(service.retryReport(CANDIDATE, "iv-1", "s1")).rejects.toMatchObject({ status: 403 });
+    expect(repo.claimReportRetry).not.toHaveBeenCalled();
   });
 
   it("answers 409, without calling the coach, when there is no failed report to retry", async () => {
     repo.claimReportRetry.mockResolvedValue(false);
-    await expect(service.retryReport(CANDIDATE, "iv-1", "s1")).rejects.toMatchObject({ status: 409 });
+    await expect(service.retryReport(OWNER, "iv-1", "s1")).rejects.toMatchObject({ status: 409 });
     await settle();
     expect(coach.review).not.toHaveBeenCalled();
   });
@@ -270,7 +263,7 @@ describe("practice service — finish and report", () => {
 
   it("get closes a session past 60 minutes and reports it as finished", async () => {
     repo.findById.mockResolvedValue(active(61));
-    const view = await service.get(CANDIDATE, "iv-1", "s1");
+    const view = await service.get(OWNER, "iv-1", "s1");
     expect(view).toMatchObject({ status: "finished", reportStatus: "pending" });
     await settle();
     expect(repo.finish).toHaveBeenCalledWith("s1");
@@ -283,7 +276,17 @@ describe("practice service — finish and report", () => {
     [active(5, { status: "finished", report: { summary: "ok" } }), "ready", { summary: "ok" }],
   ])("get reports the report status (%#)", async (session, reportStatus, report) => {
     repo.findById.mockResolvedValue(session);
-    const view = await service.get(CANDIDATE, "iv-1", "s1");
+    const view = await service.get(OWNER, "iv-1", "s1");
     expect(view).toMatchObject({ id: "s1", reportStatus, report, messages: [{ role: "candidate", text: "hello" }] });
+  });
+
+  it.each([
+    active(5, { status: "finished" }),
+    active(5, { status: "finished", report: { failed: true } }),
+    active(5, { status: "finished", report: { summary: "ok" } }),
+  ])("never shows the report, or its status, to the candidate (%#)", async (session) => {
+    repo.findById.mockResolvedValue(session);
+    const view = await service.get(CANDIDATE, "iv-1", "s1");
+    expect(view).toMatchObject({ status: "finished", reportStatus: "none", report: null });
   });
 });

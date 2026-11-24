@@ -14,7 +14,8 @@ const List: React.FC<{ title: string; items: string[] }> = ({ title, items }) =>
     </div>
   );
 
-// The coach's report at the end of a session. Its tests are only ones that really ran.
+// The report at the end of the candidate's AI session — the interviewer's eyes only.
+// Its tests are only ones that really ran.
 export const AiReport: React.FC<{
   status: ReportStatus;
   report: Report | null;
@@ -27,7 +28,7 @@ export const AiReport: React.FC<{
       <div className="space-y-4">
         <p className="text-sm text-slate-100">{report.summary}</p>
         <List title="Strengths" items={report.strengths} />
-        <List title="To improve" items={report.improvements} />
+        <List title="Weaknesses" items={report.improvements} />
         {report.testsRun.length > 0 && (
           <div>
             <h4 className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">Tests run on the final code</h4>
@@ -65,7 +66,7 @@ export const AiReport: React.FC<{
           </p>
           <p className="text-sm text-slate-400">{report.complexity.comment}</p>
         </div>
-        <List title="Next steps" items={report.nextSteps} />
+        <List title="Follow-up topics" items={report.nextSteps} />
       </div>
     );
   }

@@ -14,7 +14,7 @@ export function useAiAutoOpen(apiFetch: ApiFetch, interviewId: string, enabled: 
     checked.current = true;
     createAiInterviewerApi(apiFetch, interviewId)
       .current()
-      .then(({ sessionId }) => sessionId && openRef.current())
+      .then((sessionId) => sessionId && openRef.current())
       .catch(() => {}); // no panel, as before: the button still opens it
   }, [apiFetch, interviewId, enabled]);
 }

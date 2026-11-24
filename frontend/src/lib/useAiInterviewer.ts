@@ -12,10 +12,10 @@ const UNAVAILABLE = 'The AI interviewer is unavailable right now.';
 
 const messageOf = (err: unknown) => (err instanceof AiApiError ? err.message : UNAVAILABLE);
 
-// The state of the room's AI interviewer panel. The candidate starts the session and
-// chats (answers stream in); the interviewer only reads, by polling every 3 s. The candidate
-// polls too between their messages, so an End clicked by the interviewer shows up. Both see
-// the interview's latest session, so a reloaded room shows the conversation and its report.
+// The state of the room's AI interviewer panel. The candidate starts the interview's one
+// session and chats (answers stream in); the interviewer only reads, by polling every 3 s,
+// and alone gets the report. The candidate polls too between their messages, so an End
+// clicked by the interviewer shows up. A reloaded room finds the session again.
 export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: ApiFetch; interviewId: string; role: AiRole }) {
   const api = useMemo(() => createAiInterviewerApi(apiFetch, interviewId), [apiFetch, interviewId]);
   const [phase, setPhase] = useState<AiPhase>('loading');
@@ -27,8 +27,6 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [reportWaitOver, setReportWaitOver] = useState(false);
-  // How many new sessions the candidate may still start (null until the first load).
-  const [sessionsLeft, setSessionsLeft] = useState<number | null>(null);
 
   const sessionRef = useRef<AiSession | null>(null);
   const pollRef = useRef<PollState>({ sessionId: null, polls: 0, waitOver: false });
@@ -52,8 +50,7 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
   // Fetches the interview's latest session, unless nothing about it can change any more.
   const load = useCallback(async () => {
     const seq = turnSeqRef.current;
-    const { sessionId: id, sessionsLeft: left } = await api.current();
-    setSessionsLeft(left);
+    const id = await api.current();
     if (!id) return show(null);
     const step = pollStep(pollRef.current, id, sessionRef.current);
     pollRef.current = step.poll;
@@ -75,10 +72,9 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
     tick();
   }, [tick]);
 
-  // The interviewer follows the session live. The candidate polls while a session is
-  // active (not during a reply: it streams in) and while the report is being written.
-  const waitingForReport = phase === 'finished' && session?.reportStatus === 'pending' && !reportWaitOver;
-  const polling = role === 'interviewer' || (phase === 'active' && !replying) || waitingForReport;
+  // The interviewer follows the session live (and waits for the report). The candidate polls
+  // while the session is active, not during a reply (it streams in).
+  const polling = role === 'interviewer' || (phase === 'active' && !replying);
   useEffect(() => {
     if (!polling) return;
     const timer = setInterval(tick, POLL_MS);
@@ -159,7 +155,7 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
   // A failed report, written again; the wait for it starts over.
   const retryReport = useCallback(async () => {
     const current = sessionRef.current;
-    if (!current) return;
+    if (role !== 'interviewer' || !current) return;
     setError(null);
     try {
       await api.retryReport(current.id);
@@ -169,7 +165,7 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
     } catch (err) {
       setError(messageOf(err));
     }
-  }, [api, show]);
+  }, [api, role, show]);
 
   const checkReport = useCallback(() => {
     pollRef.current = { ...pollRef.current, polls: 0, waitOver: false };
@@ -187,7 +183,6 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
     replying,
     error: error ?? pollError,
     reportWaitOver,
-    sessionsLeft,
     start,
     send,
     finish,

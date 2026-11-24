@@ -117,14 +117,15 @@ describe("/api/interviews/:id/ai", () => {
 
   it("POST /sessions/:sid/report writes a failed report again", async () => {
     prisma.aiPracticeSession.findUnique.mockResolvedValue(session({ status: "finished", report: { failed: true } }));
-    const res = await request(app).post(`${AI}/sessions/s1/report`);
+    expect((await request(app).post(`${AI}/sessions/s1/report`)).status).toBe(403); // the candidate
+    const res = await request(app).post(`${AI}/sessions/s1/report`).set(authAs(ada));
     expect(res.status).toBe(202);
     expect(res.body).toEqual({ reportStatus: "pending" });
     await vi.waitFor(() => expect(prisma.aiPracticeSession.update).toHaveBeenCalledWith({
       where: { id: "s1" }, data: { report: { summary: "ok" } }, select: { id: true },
     }));
     prisma.aiPracticeSession.updateMany.mockResolvedValue({ count: 0 });
-    expect((await request(app).post(`${AI}/sessions/s1/report`)).status).toBe(409);
+    expect((await request(app).post(`${AI}/sessions/s1/report`).set(authAs(ada))).status).toBe(409);
   });
 
   it("aborts the agent when the candidate disconnects mid-answer", async () => {
@@ -156,16 +157,24 @@ describe("/api/interviews/:id/ai", () => {
     prisma.aiPracticeSession.findFirst.mockResolvedValue(session({ status: "finished" }));
     const res = await request(app).get(`${AI}/sessions/current`);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ sessionId: "s1", sessionsLeft: 3 });
+    expect(res.body).toEqual({ sessionId: "s1" });
     expect(prisma.aiPracticeSession.findFirst).toHaveBeenCalledWith({ where: { interviewId: "iv-1" }, orderBy: { startedAt: "desc" } });
   });
 
-  it("caps sessions per interview at 3", async () => {
-    prisma.aiPracticeSession.count.mockResolvedValue(3);
+  it("allows one AI session per interview", async () => {
+    prisma.aiPracticeSession.count.mockResolvedValue(1);
     const res = await request(app).post(`${AI}/sessions`).send({ language: "python" });
     expect(res.status).toBe(409);
-    expect(res.body).toEqual({ message: "No AI interviewer sessions left for this interview" });
+    expect(res.body).toEqual({ message: "The AI interview of this interview has already taken place" });
     expect(prisma.aiPracticeSession.count).toHaveBeenCalledWith({ where: { interviewId: "iv-1" } });
+  });
+
+  it("gives the candidate the conversation of a finished session, never its report", async () => {
+    prisma.aiPracticeSession.findUnique.mockResolvedValue(session({ status: "finished", report: { summary: "ok" } }));
+    const res = await request(app).get(`${AI}/sessions/s1`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: "finished", reportStatus: "none", report: null });
+    expect(JSON.stringify(res.body)).not.toContain("summary");
   });
 
   it("lets the owner read the session, report included, but not start or send", async () => {

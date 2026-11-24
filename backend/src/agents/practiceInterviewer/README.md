@@ -1,6 +1,6 @@
 # Practice interviewer agent
 
-A LangChain `createAgent` (ReAct loop: model ↔ tools) that runs a candidate's practice
+A LangChain `createAgent` (ReAct loop: model ↔ tools) that runs a candidate's AI
 session: it picks a problem, writes its own statement, reads and runs the candidate's code,
 gives graduated hints and decides when the session is over.
 

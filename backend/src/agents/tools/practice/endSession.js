@@ -9,7 +9,7 @@ export const createEndSessionTool = () =>
   tool(async () => "Session ended. Say a short goodbye.", {
     name: END_SESSION_TOOL,
     description:
-      "End the practice session. Use it when the candidate has solved the problem and discussed it, " +
+      "End the AI interview. Use it when the candidate has solved the problem and discussed it, " +
       "gives up, or asks to stop.",
     schema: z.object({
       reason: z.enum(["solved", "gave_up", "out_of_time"]).describe("Why the session ends"),

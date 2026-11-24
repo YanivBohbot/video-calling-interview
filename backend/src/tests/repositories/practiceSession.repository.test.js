@@ -33,7 +33,7 @@ describe("practiceSession repository", () => {
 
 });
 
-describe("practiceSession repository — report retry and count", () => {
+describe("practiceSession repository — report retry", () => {
   it("claimReportRetry clears a failed report of a finished session, atomically", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     expect(await repoWith({ updateMany }).claimReportRetry("s1")).toBe(true);
@@ -43,12 +43,6 @@ describe("practiceSession repository — report retry and count", () => {
     });
     updateMany.mockResolvedValue({ count: 0 });
     expect(await repoWith({ updateMany }).claimReportRetry("s1")).toBe(false);
-  });
-
-  it("countForInterview counts every session of the interview", async () => {
-    const count = vi.fn().mockResolvedValue(2);
-    expect(await repoWith({ count }).countForInterview("iv-1")).toBe(2);
-    expect(count).toHaveBeenCalledWith({ where: { interviewId: "iv-1" } });
   });
 });
 

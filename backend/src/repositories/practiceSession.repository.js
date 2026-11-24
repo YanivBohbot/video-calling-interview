@@ -31,9 +31,6 @@ export const createPracticeSessionRepository = ({ prisma }) => {
         return { session: await rows.create({ data: { interviewId, language } }), closedId };
       }),
 
-    // How many sessions the interview has used (active or finished).
-    countForInterview: (interviewId) => sessions.count({ where: { interviewId } }),
-
     // Clears a failed report so it can be written again. True only for the call that
     // cleared it (two clicks at once start one report).
     claimReportRetry: async (id) => {
