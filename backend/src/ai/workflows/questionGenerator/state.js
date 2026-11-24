@@ -56,7 +56,7 @@ export const SearchQuerySchema = z.object({
 });
 
 // Runtime context (LangGraph `contextSchema`): the run's dependencies. Passed as
-// `{ context }` on every invoke by execution/generator.js, read by nodes as `runtime.context`,
+// `{ context }` on every invoke by generator.js, read by nodes as `runtime.context`,
 // and never written to a checkpoint.
 const fn = () => z.custom((v) => typeof v === "function", { message: "must be a function" });
 export const QuestionGenContext = z.object({

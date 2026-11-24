@@ -10,7 +10,7 @@ const passThrough = (err) => err instanceof AIInvalidResponseError || err instan
 // thread, addressed as `${interviewId}:${jobId}` — a jobId minted for one interview
 // resolves to nothing for any other.
 //
-// `graph` is the compiled workflow (graph/workflow.js); `context` its runtime dependencies
+// `graph` is the compiled workflow (workflow.js); `context` its runtime dependencies
 // (QuestionGenContext), passed on every invoke — start, resume and the finalize retry.
 export const createQuestionGenerator = ({ graph, context }) => {
   const threadConfig = (interviewId, jobId) => ({

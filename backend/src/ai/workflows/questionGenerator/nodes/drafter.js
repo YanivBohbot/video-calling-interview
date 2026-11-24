@@ -1,6 +1,6 @@
 import { attachSources } from "../sources.js";
 
-// LLM step: draft the questions (structured output). Dependency (runtime.context): draft (llm/models.js).
+// LLM step: draft the questions (structured output). Dependency (runtime.context): draft (models.js).
 
 const formatResearch = (research) =>
   research.length ? research.map((p) => `- ${p.slug} — ${p.title} (${p.difficulty})`).join("\n") : "none";

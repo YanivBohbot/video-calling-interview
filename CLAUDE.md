@@ -61,9 +61,10 @@ backend/src/
   validators/      <x>.schemas.js (zod request schemas, client-facing messages) + question.validation.js
                    features: interview, user, session, question (AI), stream
   tests/           http/ (cross-layer HTTP tests: buildTestApp() = real container over a stub prisma + fakes)
-                   agents/questionGenerator/ (agent tests, same tree as the agent) · architecture/ (import-rule guards) · helpers/testApp.js
+                   ai/ (agent, workflow, tool, prompt tests, same tree as src/ai) · architecture/ (import-rule guards) · helpers/testApp.js
   realtime/        Socket.io: attachRealtime, one handler per event, roomState, roomQuestions, flushScheduler
-  agents/          questionGenerator (LangGraph workflow), practiceInterviewer + practiceCoach (createAgent), shared tools/ and middleware/
+  ai/              everything LLM, by kind (see ai/README.md): agents/ (interviewer, coach: createAgent) · workflows/ (questionGenerator: StateGraph)
+                   · tools/ · prompts/ · middleware/ · checkpointer.js (PostgresSaver, shared)
   integrations/    plain HTTP clients for external services: piston/client.js (runs code), leetcode/client.js (GraphQL search)
   lib/             db.js (prisma singleton), rateLimiter.js, seed.js
 ```
@@ -104,15 +105,15 @@ Code execution (the "Run" button) goes through `POST /api/code/run` (any princip
 
 ### AI question generator
 
-`backend/src/agents/` drafts interview questions with a LangGraph pipeline (planner → researcher → drafter → validator → human approval → finalize), grounded on real LeetCode problems found with `integrations/leetcode/client.js` (LeetCode's GraphQL API, injected by `container.js`); approved questions land in `Interview.questions` (Json).
+`backend/src/ai/workflows/questionGenerator/` drafts interview questions with a LangGraph pipeline (planner → researcher → drafter → validator → human approval → finalize), grounded on real LeetCode problems found with `integrations/leetcode/client.js` (LeetCode's GraphQL API, injected by `container.js`); approved questions land in `Interview.questions` (Json).
 
 ```
-agents/questionGenerator/       one folder per responsibility (see its README.md)
-  index.js          the only entry point — the rest of the backend imports from here (enforced by tests/architecture/aiWiring.test.js)
-  graph/            workflow.js (StateGraph, exported uncompiled) · state.js (state + runtime-context schemas) · nodes/<one per file>
-  llm/              models.js — initChatModel("provider:model").withStructuredOutput(zod) · prompts.js
-  tools/leetcode/   sources.js — attaches verified LeetCode sources to drafted questions
-  execution/        generator.js — createQuestionGenerator({ graph, context }) → { start, resume } · checkpointer.js (PostgresSaver)
+ai/workflows/questionGenerator/   (see its README.md)
+  index.js       the only entry point — the rest of the backend imports from here (enforced by tests/architecture/aiWiring.test.js)
+  workflow.js    StateGraph, exported uncompiled · state.js (state + runtime-context schemas) · nodes/<one per file>
+  models.js      initChatModel("provider:model").withStructuredOutput(zod) — prompts in ai/prompts/questionGenerator.js
+  sources.js     attaches verified LeetCode sources to drafted questions
+  generator.js   createQuestionGenerator({ graph, context }) → { start, resume } — checkpointer is ai/checkpointer.js
   errors.js
 ```
 
@@ -121,14 +122,15 @@ agents/questionGenerator/       one folder per responsibility (see its README.md
 A panel of the interview room (no separate link: the invite link opens it; it opens by itself when the interview already has a session). One AI session per interview. The question on screen lives in `container.realtime.roomQuestions` (a Map shared by the realtime channel, which writes it, and `practice.service.js`, which reads it). When the interviewer switches question mid-session, that turn gets a system note right before the candidate's message (`buildQuestionSwitchNote`) so the AI announces the new question; a note in the system prompt alone was ignored about half the time. Only the invited candidate starts it and writes to the AI; the owner follows the conversation (polling), may end the session, and alone gets the report (the candidate's `GET` always answers `reportStatus: "none"`, `report: null`). Frontend: `components/ai/AiInterviewerPanel.tsx` (toggled by "AI interviewer" in both rooms, next to the editor; the interviewer's questions are in a "Questions (n)" menu of the same tab bar (`components/QuestionList.tsx`), whose Ask goes through the editor's socket via `EditorHandle.ask`; the question on screen is a banner above the workspace (`QuestionBanner`) and both rooms switch to the tab it needs (`lib/roomQuestions.ts`: technical → code, system-design → whiteboard); the editor stays mounted on every tab since it holds the socket; reads the shared editor through `CollaborativeEditor`'s `onCodeChange`), state in `lib/useAiInterviewer.ts`, HTTP + SSE in `lib/aiInterviewer.ts`. Two independent `createAgent` agents:
 
 ```
-agents/practiceInterviewer/   ReAct agent: asks the interview's question (the one on screen via Ask, else the first technical one; find_problem on LeetCode only when there is none), read_candidate_code, run_code, end_session; streamTurn() → token/tool/done events, history()
-agents/practiceCoach/         ReAct agent with responseFormat = toolStrategy(PracticeReportSchema); the report keeps only tests run_code really ran
-agents/tools/                 shared LangChain tools, one factory per file (clients injected as functions)
-agents/middleware/            turnLimits (≤6 model / ≤8 tool calls per turn), createCallBudget (coach: wrap hooks — built-in limit middlewares break the structured-output retry in langchain 1.5), withFallback, content-free logging
+ai/agents/interviewer/        ReAct agent: asks the interview's question (the one on screen via Ask, else the first technical one; find_problem on LeetCode only when there is none), read_candidate_code, run_code, end_session; streamTurn() → token/tool/done events, history()
+ai/agents/coach/              ReAct agent with responseFormat = toolStrategy(PracticeReportSchema); the report keeps only tests run_code really ran
+ai/tools/                     shared LangChain tools, one factory per file (clients injected as functions)
+ai/prompts/                   one file per agent / workflow (interviewer.js, coach.js, questionGenerator.js)
+ai/middleware/                turnLimits (≤6 model / ≤8 tool calls per turn), createCallBudget (coach: wrap hooks — built-in limit middlewares break the structured-output retry in langchain 1.5), withFallback, content-free logging
 ```
 
 `/api/interviews/:id/ai` (behind the normal `authenticate`; access checked in `practice.service.js`): `POST /sessions` (candidate), `GET /sessions/current` (`{ sessionId }`, so a refreshed room finds its session), `GET /sessions/:sid`, `POST /sessions/:sid/messages` (SSE: `token`, `tool`, `done`, `error`; refusals are JSON before the stream; a client disconnect aborts the turn), `POST /sessions/:sid/finish` (report written in the background), `POST /sessions/:sid/report` (owner only: writes a failed report again). The candidate polls too while a session is active, so the owner's End reaches them. Caps (`services/practice.service.js`): 1 session per interview (started under a per-interview advisory lock, `startExclusive`), 60 min and 60 messages per session (atomic counter), one reply at a time per session (409), 10 messages/min per interview. A turn aborted mid-tool leaves unanswered tool calls; `streamTurn` answers them ("Cancelled…") before the next turn, or OpenAI would reject the thread. The coach may not report before it ran the candidate's code (`requireToolBeforeResponse`), and `passed` is recomputed from the real output. Sessions are in table `ai_practice_sessions` (not `practice_sessions`: that one belongs to an unrelated older branch); the conversation is in the shared PostgresSaver, thread `practice:<sessionId>`. Agent tests use LangChain's `fakeModel()` — no key.
 
-The agents' tests are not next to their code: they live in `src/tests/agents/questionGenerator/`, in the same folder tree (`graph/workflow.js` → `tests/agents/questionGenerator/graph/workflow.test.js`).
+The AI tests are not next to their code: they live in `src/tests/ai/`, in the same folder tree (`ai/workflows/questionGenerator/workflow.js` → `tests/ai/workflows/questionGenerator/workflow.test.js`). Outside `src/ai/`, code imports only `ai/agents/<x>/index.js`, `ai/workflows/<x>/index.js` or `ai/checkpointer.js`; `tools/`, `prompts/`, `middleware/` never import an agent or a workflow (`tests/architecture/aiWiring.test.js`).
 
-`container.js` compiles `workflow` with the checkpointer and builds its runtime context, lazily (`container.ai.setup` is called by `server.js`); agents never import Prisma, `src/integrations/` or read `process.env`. Models are full LangChain `provider:model` strings: `AI_MODEL` (default `openai:gpt-4o-mini`) and `AI_MODEL_FALLBACK` (default `openai:gpt-4o`); a bare name means OpenAI. Audit and rationale: `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.
+`container.js` compiles `workflow` with the checkpointer and builds its runtime context, lazily (`container.ai.setup` is called by `server.js`); nothing in `src/ai/` imports Prisma, `src/integrations/` or reads `process.env`. Models are full LangChain `provider:model` strings: `AI_MODEL` (default `openai:gpt-4o-mini`) and `AI_MODEL_FALLBACK` (default `openai:gpt-4o`); a bare name means OpenAI. Audit and rationale: `docs/superpowers/audits/2026-11-20-langchain-agent-audit.md`.
