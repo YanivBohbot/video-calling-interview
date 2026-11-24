@@ -1,11 +1,7 @@
 import { StreamClient } from "@stream-io/node-sdk";
 import { createRateLimiter } from "./lib/rateLimiter.js";
-import {
-  workflow,
-  createQuestionModels,
-  createCheckpointer,
-  createQuestionGenerator,
-} from "./agents/questionGenerator/index.js";
+import { workflow, createQuestionModels, createQuestionGenerator } from "./ai/workflows/questionGenerator/index.js";
+import { createCheckpointer } from "./ai/checkpointer.js";
 import { createClerkVerifier } from "./auth/clerkVerifier.js";
 import { createDemoTokens } from "./auth/demoTokens.js";
 import { createIdentityResolver } from "./auth/identityResolver.js";
@@ -43,8 +39,8 @@ import { createPracticeService } from "./services/practice.service.js";
 import { createPracticeController } from "./controllers/practice.controller.js";
 import { createPracticeRouter } from "./routes/practice.routes.js";
 import { EDITOR_LANGUAGES } from "./integrations/piston/client.js";
-import { createPracticeInterviewer } from "./agents/practiceInterviewer/index.js";
-import { createPracticeCoach } from "./agents/practiceCoach/index.js";
+import { createPracticeInterviewer } from "./ai/agents/interviewer/index.js";
+import { createPracticeCoach } from "./ai/agents/coach/index.js";
 
 const AI_GENERATIONS_PER_HOUR = 10;
 // Shared by every demo visitor (the demo is public).

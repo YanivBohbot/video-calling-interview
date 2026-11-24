@@ -23,7 +23,7 @@ describe("AI wiring", () => {
   it("agents never import Prisma or read process.env", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const dir = path.resolve(import.meta.dirname, "../../agents");
+    const dir = path.resolve(import.meta.dirname, "../../ai");
     const files = fs.readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".js") && !f.endsWith(".test.js"));
     for (const f of files) {
       const code = fs.readFileSync(path.join(dir, f), "utf8");
@@ -34,7 +34,7 @@ describe("AI wiring", () => {
   it("agents never import integrations/ (clients are injected by container.js)", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const dir = path.resolve(import.meta.dirname, "../../agents");
+    const dir = path.resolve(import.meta.dirname, "../../ai");
     const files = fs.readdirSync(dir, { recursive: true }).filter((f) => f.endsWith(".js"));
     for (const f of files) {
       const code = fs.readFileSync(path.join(dir, f), "utf8");
@@ -50,16 +50,16 @@ describe("AI wiring", () => {
     return fs
       .readdirSync(src, { recursive: true })
       .map((f) => f.split(path.sep).join("/"))
-      .filter((f) => f.endsWith(".js") && !f.startsWith("agents/") && !f.startsWith("tests/agents/"))
+      .filter((f) => f.endsWith(".js") && !f.startsWith("ai/") && !f.startsWith("tests/ai/"))
       .map((f) => ({ f, code: fs.readFileSync(path.join(src, f), "utf8") }));
   };
 
-  it.each(["questionGenerator", "practiceInterviewer", "practiceCoach"])(
+  it.each(["workflows/questionGenerator", "agents/interviewer", "agents/coach"])(
     "the rest of the backend reaches %s only through its index.js",
     async (agent) => {
       for (const { f, code } of await backendFilesOutsideAgents()) {
-        for (const [, target] of code.matchAll(new RegExp(`from "([^"]*agents/${agent}[^"]*)"`, "g"))) {
-          expect(target, f).toMatch(new RegExp(`agents/${agent}/index[.]js$`));
+        for (const [, target] of code.matchAll(new RegExp(`from "([^"]*ai/${agent}[^"]*)"`, "g"))) {
+          expect(target, f).toMatch(new RegExp(`ai/${agent}/index[.]js$`));
         }
       }
     },
@@ -67,14 +67,14 @@ describe("AI wiring", () => {
 
   it("shared tools and middleware are used by agents only", async () => {
     for (const { f, code } of await backendFilesOutsideAgents()) {
-      expect(code, f).not.toMatch(/from "[^"]*agents\/(tools|middleware)\//);
+      expect(code, f).not.toMatch(/from "[^"]*ai\/(tools|middleware|prompts)\//);
     }
   });
 
   it("each tool file defines one tool whose schema fields all have a .describe()", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const dir = path.resolve(import.meta.dirname, "../../agents/tools");
+    const dir = path.resolve(import.meta.dirname, "../../ai/tools");
     const files = fs
       .readdirSync(dir, { recursive: true })
       .map((f) => f.split(path.sep).join("/"))
