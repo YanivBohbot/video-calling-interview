@@ -6,7 +6,7 @@ import { createSseParser } from './sse';
 
 export type AiMessage = { role: 'candidate' | 'interviewer'; text: string };
 
-// Mirror of the backend's PracticeReportSchema (agents/practiceCoach/report.js).
+// Mirror of the backend's PracticeReportSchema (backend/src/ai/agents/coach/report.js).
 export type AiReport = {
   summary: string;
   strengths: string[];

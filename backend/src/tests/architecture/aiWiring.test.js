@@ -31,14 +31,16 @@ describe("AI wiring", () => {
       .filter((f) => f.endsWith(".js"))
       .map((f) => ({ f, code: fs.readFileSync(path.join(src, f), "utf8") }));
   };
-  const importsOf = (code) => [...code.matchAll(/(?:from|import)\s*\(?\s*"([^"]+)"/g)].map(([, target]) => target);
+  // Static, side-effect and dynamic imports, with any quote (template literals included).
+  const importsOf = (code) =>
+    [...code.matchAll(/(?:from|import)\s*\(?\s*(["'`])([^"'`]+)\1/g)].map(([, , target]) => target);
   const aiFiles = async () => (await sourceFiles()).filter(({ f }) => f.startsWith("ai/"));
   // Outside ai/ and the AI tests (tests/ai/ may reach internals).
   const filesOutsideAi = async () =>
     (await sourceFiles()).filter(({ f }) => !f.startsWith("ai/") && !f.startsWith("tests/ai/"));
 
   it("nothing in ai/ imports Prisma or reads process.env", async () => {
-    for (const { f, code } of await aiFiles()) expect(code, f).not.toMatch(/lib\/db\.js|process\.env/);
+    for (const { f, code } of await aiFiles()) expect(code, f).not.toMatch(/lib\/db\.js|@prisma\/client|process\.env/);
   });
 
   it("nothing in ai/ imports integrations/ (clients are injected by container.js)", async () => {
@@ -68,7 +70,8 @@ describe("AI wiring", () => {
     const shared = (await aiFiles()).filter(({ f }) => /^ai\/(tools|prompts|middleware)\//.test(f));
     expect(shared.length).toBeGreaterThan(0);
     for (const { f, code } of shared) {
-      for (const target of importsOf(code)) expect(target, f).not.toMatch(/(agents|workflows)\//);
+      // Our own files only: a package path may well contain "agents/".
+      for (const target of importsOf(code).filter((t) => t.startsWith("."))) expect(target, f).not.toMatch(/(agents|workflows)\//);
     }
   });
 
