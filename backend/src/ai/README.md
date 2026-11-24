@@ -18,7 +18,7 @@ ai/
 │   └── coach/              writes the end-of-session report (structured response)
 ├── workflows/
 │   └── questionGenerator/  drafts interview questions, human approval → see its README.md
-├── tools/                  run_code · find_problem · read_candidate_code · end_session
+├── tools/                  run_code · find_problem · read_candidate_code · end_session · present_question
 ├── prompts/                interviewer.js · coach.js · questionGenerator.js
 ├── middleware/             limits · budget · fallback · logging · requireToolBeforeResponse
 └── checkpointer.js         PostgresSaver (own "langgraph" schema), shared by the interviewer and the workflow
@@ -28,7 +28,7 @@ ai/
 
 | | Tools | Prompts | Middleware | Checkpointer |
 |---|---|---|---|---|
-| `agents/interviewer` | find_problem, read_candidate_code, run_code, end_session | `prompts/interviewer.js` (dynamic, per call) | turnLimits, withFallback, logging | yes, thread `practice:<sessionId>` |
+| `agents/interviewer` | find_problem, read_candidate_code, run_code, end_session, present_question (avatar mode) | `prompts/interviewer.js` (dynamic, per call) | turnLimits, withFallback, logging | yes, thread `practice:<sessionId>` |
 | `agents/coach` | run_code, read_candidate_code | `prompts/coach.js` | createCallBudget, requireToolBeforeResponse(run_code), withFallback, logging | no (one invoke per report) |
 | `workflows/questionGenerator` | — (the code runs the LeetCode search) | `prompts/questionGenerator.js` | — | yes, one thread per job |
 
