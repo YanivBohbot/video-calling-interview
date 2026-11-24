@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>factory</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --border: #2a2e37; --text: #e6e8ec;
+    --muted: #8b90a0; --pass: #3fb950; --changes: #e5534b; --pending: #d2a93c;
+    --accent: #5b8def; --human: #e5534b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px;
+  }
+  header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: 0.02em; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  #human-banner {
+    display: none; margin: 16px 24px 0; padding: 10px 16px; border-radius: 8px;
+    background: rgba(229,83,75,0.12); border: 1px solid var(--human); color: var(--human);
+    font-weight: 600; font-size: 13px;
+  }
+  .board {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;
+    padding: 20px 24px; align-items: start;
+  }
+  .col h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0 0 10px 4px; font-weight: 600;
+  }
+  .col-cards { display: flex; flex-direction: column; gap: 10px; min-height: 40px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; cursor: pointer; transition: border-color .15s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card.needs-human { border-color: var(--human); background: rgba(229,83,75,0.08); }
+  .card .id { font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
+  .card .feature {
+    font-size: 13px; margin: 4px 0 8px; line-height: 1.35;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .round-badge {
+    font-size: 11px; color: var(--muted); background: #00000033; padding: 1px 6px;
+    border-radius: 4px; font-family: ui-monospace, monospace;
+  }
+  .chip {
+    font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .chip.pass { background: rgba(63,185,80,0.15); color: var(--pass); }
+  .chip.changes { background: rgba(229,83,75,0.15); color: var(--changes); }
+  .chip.pending { background: rgba(210,169,60,0.15); color: var(--pending); }
+  .empty { color: var(--muted); font-size: 12px; padding: 8px 4px; }
+  .backdrop {
+    display: none; position: fixed; inset: 0; background: #000000a0;
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    width: min(880px, 92vw); max-height: 86vh; display: flex; flex-direction: column;
+  }
+  .modal-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .modal-head h3 { margin: 0; font-size: 14px; }
+  .modal-head button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; }
+  .tabs { display: flex; gap: 4px; padding: 10px 18px 0; flex-wrap: wrap; }
+  .tabs button {
+    background: #00000033; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px 6px 0 0; padding: 5px 10px; font-size: 12px; cursor: pointer;
+  }
+  .tabs button.active { color: var(--text); border-color: var(--accent); background: #00000055; }
+  .modal-body { padding: 16px 18px; overflow-y: auto; }
+  .modal-body pre {
+    white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace;
+    font-size: 12.5px; line-height: 1.5; margin: 0;
+  }
+  .verdict-pass { color: var(--pass); }
+  .verdict-changes { color: var(--changes); }
+  .verdict-pending { color: var(--pending); }
+  .round-row { margin-top: 4px; }
+  #human-list a { color: var(--human); text-decoration: underline; cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>factory</h1>
+  <span class="meta" id="updated-at">loading…</span>
+</header>
+<div id="human-banner">⚠ job(s) need a human — <span id="human-list"></span></div>
+<div class="board" id="board"></div>
+
+<div class="backdrop" id="backdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modal-title"></h3>
+      <button id="modal-close">✕</button>
+    </div>
+    <div class="tabs" id="modal-tabs"></div>
+    <div class="modal-body" id="modal-body"><pre>loading…</pre></div>
+  </div>
+</div>
+
+<script>
+const STAGES = [
+  { key: "spec", label: "Spec" },
+  { key: "build", label: "Build" },
+  { key: "review", label: "Review" },
+  { key: "approve", label: "Approve" },
+  { key: "done", label: "Done" },
+  { key: "needs-human", label: "Needs human" },
+];
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function verdictClass(v) {
+  if (v === "PASS") return "pass";
+  if (v === "CHANGES") return "changes";
+  return "pending";
+}
+
+function reviewChipRow(roundNum, reviews, live, jobId) {
+  reviews = reviews || {};
+  const chips = ["security", "ux", "ui", "code"].map(name => {
+    const v = reviews[name] || "pending";
+    const idAttr = live ? ` id="chip-${jobId}-${name}"` : "";
+    return `<span class="chip ${verdictClass(v)}"${idAttr}>${name}</span>`;
+  }).join("");
+  return `<div class="row round-row">
+    <span class="round-badge">round ${roundNum}${live ? " · live" : ""}</span>
+    ${chips}
+  </div>`;
+}
+
+function jobCard(job) {
+  const needsHuman = job.stage === "needs-human";
+  const history = (job.rounds || [])
+    .map(r => reviewChipRow(r.round, r.reviews, false, job.id))
+    .join("");
+  const liveRow = job.stage === "review"
+    ? reviewChipRow(job.round || 1, job.reviews, true, job.id)
+    : "";
+  return `
+    <div class="card${needsHuman ? " needs-human" : ""}" data-id="${escapeHtml(job.id)}">
+      <div class="id">${escapeHtml(job.id)}</div>
+      <div class="feature">${escapeHtml(job.feature || "")}</div>
+      ${history}
+      ${liveRow}
+      ${needsHuman ? `<div class="row"><span class="chip changes">${escapeHtml(job.decision || "ESCALATE")}</span></div>` : ""}
+    </div>`;
+}
+
+function render(data) {
+  const jobs = data.jobs || [];
+  const board = document.getElementById("board");
+  board.innerHTML = STAGES.map(stage => {
+    const inStage = jobs.filter(j => j.stage === stage.key);
+    return `
+      <div class="col">
+        <h2>${stage.label}</h2>
+        <div class="col-cards">
+          ${inStage.length ? inStage.map(jobCard).join("") : '<div class="empty">—</div>'}
+        </div>
+      </div>`;
+  }).join("");
+
+  const human = jobs.filter(j => j.stage === "needs-human");
+  const banner = document.getElementById("human-banner");
+  if (human.length) {
+    banner.style.display = "block";
+    document.getElementById("human-list").innerHTML = human
+      .map(j => `<a href="#" class="human-link" data-id="${escapeHtml(j.id)}">${escapeHtml(j.id)}</a>`)
+      .join(", ");
+    document.querySelectorAll(".human-link").forEach(el => {
+      el.addEventListener("click", e => {
+        e.preventDefault();
+        openModal(jobs.find(j => j.id === el.dataset.id));
+      });
+    });
+  } else {
+    banner.style.display = "none";
+  }
+
+  document.querySelectorAll(".card").forEach(el => {
+    el.addEventListener("click", () => openModal(jobs.find(j => j.id === el.dataset.id)));
+  });
+
+  document.getElementById("updated-at").textContent = "updated " + new Date().toLocaleTimeString();
+  probeLiveRounds(jobs.filter(j => j.stage === "review"));
+}
+
+async function probeLiveRounds(reviewJobs) {
+  for (const job of reviewJobs) {
+    for (const name of ["security", "ux", "ui", "code"]) {
+      const el = document.getElementById(`chip-${job.id}-${name}`);
+      if (!el) continue;
+      try {
+        const res = await fetch(`jobs/${job.id}/round-${job.round || 1}/review-${name}.md?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) continue;
+        const text = await res.text();
+        const verdict = /^VERDICT:\s*CHANGES/.test(text) ? "CHANGES" : /^VERDICT:\s*PASS/.test(text) ? "PASS" : "pending";
+        el.className = `chip ${verdictClass(verdict)}`;
+      } catch (e) { /* leave as pending */ }
+    }
+  }
+}
+
+async function poll() {
+  try {
+    const res = await fetch("board.json?t=" + Date.now(), { cache: "no-store" });
+    const data = await res.json();
+    render(data);
+  } catch (e) {
+    document.getElementById("updated-at").textContent = "board.json unreachable";
+  }
+}
+poll();
+setInterval(poll, 3000);
+
+// ---- modal ----
+
+function jobFiles(job) {
+  const files = [{ label: "spec", path: `jobs/${job.id}/spec.md` }];
+  files.push({ label: "build", path: `jobs/${job.id}/build.md` });
+  const rounds = Math.max(job.round || 1, (job.rounds || []).length);
+  for (let r = 1; r <= rounds; r++) {
+    for (const rev of ["security", "ux", "ui", "code"]) {
+      files.push({ label: `round ${r} · ${rev}`, path: `jobs/${job.id}/round-${r}/review-${rev}.md` });
+    }
+  }
+  files.push({ label: "decision", path: `jobs/${job.id}/decision.md` });
+  return files;
+}
+
+function colorizeVerdict(text) {
+  const escaped = escapeHtml(text);
+  return escaped.replace(/^(VERDICT: PASS|APPROVE)/m, '<span class="verdict-pass">$1</span>')
+                .replace(/^(VERDICT: CHANGES|ESCALATE)/m, '<span class="verdict-changes">$1</span>');
+}
+
+let currentFiles = [];
+
+function openModal(job) {
+  if (!job) return;
+  currentFiles = jobFiles(job);
+  document.getElementById("modal-title").textContent = `${job.id} — ${job.feature || ""}`;
+  document.getElementById("modal-tabs").innerHTML = currentFiles
+    .map((f, i) => `<button data-i="${i}">${f.label}</button>`).join("");
+  document.getElementById("backdrop").style.display = "flex";
+  document.querySelectorAll("#modal-tabs button").forEach(btn => {
+    btn.addEventListener("click", () => selectTab(Number(btn.dataset.i)));
+  });
+  selectTab(0);
+}
+
+async function selectTab(i) {
+  document.querySelectorAll("#modal-tabs button").forEach((b, idx) => b.classList.toggle("active", idx === i));
+  const body = document.getElementById("modal-body");
+  body.innerHTML = "<pre>loading…</pre>";
+  try {
+    const res = await fetch(currentFiles[i].path + "?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("not written yet");
+    const text = await res.text();
+    body.innerHTML = `<pre>${colorizeVerdict(text)}</pre>`;
+  } catch (e) {
+    body.innerHTML = '<pre class="verdict-pending">not written yet</pre>';
+  }
+}
+
+document.getElementById("modal-close").addEventListener("click", () => {
+  document.getElementById("backdrop").style.display = "none";
+});
+document.getElementById("backdrop").addEventListener("click", e => {
+  if (e.target.id === "backdrop") document.getElementById("backdrop").style.display = "none";
+});
+</script>
+</body>
+</html>

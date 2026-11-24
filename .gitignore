@@ -1,3 +1,8 @@
 node_modules
 .env
 .DS_Store
+
+# factory runtime state — board.json and job folders are generated per run
+factory/board.json
+factory/jobs/*
+!factory/jobs/.gitkeep
