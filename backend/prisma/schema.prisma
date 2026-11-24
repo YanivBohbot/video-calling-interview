@@ -36,6 +36,10 @@ model Interview {
   duration       Int      @default(60)
   interviewType  String   @default("technical")
   notes          String   @default("")
+  company        String   @default("")
+  // The interviewer opts in to the AI interviewer for this interview; language of its voice/text.
+  aiInterviewerEnabled Boolean @default(false)
+  interviewLanguage    String  @default("en")
   codeSnapshot   String?
   codeLanguage   String?  @default("javascript")
   questions      Json?
@@ -74,6 +78,9 @@ model AiPracticeSession {
   code         String?
   report       Json?
   messageCount Int       @default(0)
+  mode         String    @default("text")
+  presentedIndex Int?
+  avatarTokens Int       @default(0)
   startedAt    DateTime  @default(now())
   finishedAt   DateTime?
 

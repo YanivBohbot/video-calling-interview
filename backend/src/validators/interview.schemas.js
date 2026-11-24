@@ -5,6 +5,10 @@ const MISSING = "Missing required interview fields";
 const STATUSES = ["scheduled", "live", "completed", "cancelled"];
 const status = z.enum(STATUSES, { errorMap: () => ({ message: "Invalid status" }) });
 
+const company = optionalString("Invalid company");
+const aiInterviewerEnabled = z.boolean({ invalid_type_error: "Invalid aiInterviewerEnabled" }).optional();
+const interviewLanguage = z.enum(["en", "he"], { errorMap: () => ({ message: "Invalid interviewLanguage" }) }).optional();
+
 export const createInterviewBody = z.object({
   candidateName: requiredString(MISSING),
   candidateEmail: requiredString(MISSING),
@@ -15,6 +19,9 @@ export const createInterviewBody = z.object({
   duration: z.number({ invalid_type_error: "Invalid duration" }).int("Invalid duration").nonnegative("Invalid duration").nullish(),
   interviewType: optionalString("Invalid interviewType"),
   notes: optionalString("Invalid notes"),
+  company,
+  aiInterviewerEnabled,
+  interviewLanguage,
 });
 
 export const updateStatusBody = z.object({ status });
@@ -23,4 +30,7 @@ export const updateStatusBody = z.object({ status });
 export const updateInterviewBody = z.object({
   notes: z.string({ invalid_type_error: "Invalid notes" }).optional(),
   status: status.optional(),
+  company,
+  aiInterviewerEnabled,
+  interviewLanguage,
 });

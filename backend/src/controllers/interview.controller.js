@@ -12,6 +12,11 @@ const toCandidateRoomDoc = (iv) => ({
   status: iv.status,
   codeLanguage: iv.codeLanguage,
   codeSnapshot: iv.codeSnapshot,
+  company: iv.company,
+  interviewLanguage: iv.interviewLanguage,
+  aiInterviewerEnabled: iv.aiInterviewerEnabled,
+  // How many questions there are, never the questions themselves.
+  questionCount: Array.isArray(iv.questions) ? iv.questions.length : 0,
   viewer: "candidate",
 });
 
