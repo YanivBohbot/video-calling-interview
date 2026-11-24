@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useImperativeHandle, useState, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { io, Socket } from 'socket.io-client';
-import { Code, Play, Copy, ExternalLink, ListChecks, Sparkles } from 'lucide-react';
+import { Code, Play, Copy } from 'lucide-react';
+import { LeetCodeBadge } from './LeetCodeBadge';
 import type { Question, AskedQuestion } from '../lib/questions';
 import { API_URL } from '../lib/config';
 import type { ApiFetch } from '../lib/api';
@@ -19,25 +20,17 @@ interface CodeEditorProps {
   socketAuth: SocketAuth;
   // Runs code through the backend (POST /api/code/run) with this page's credential.
   apiFetch: ApiFetch;
-  // Interviewer only: opens the AI question generator (InterviewRoom owns it).
-  onManageQuestions?: () => void;
+  // Interviewer only: the question on screen changed (the room's question list highlights it).
+  onQuestionUpdate?: (question: AskedQuestion) => void;
+  // Interviewer only: `ask(index)` shows a question to everyone, from the room's question list.
+  ref?: React.Ref<EditorHandle>;
   // Sees the editor's content whenever it changes (local edit, remote update, language).
   onCodeChange?: (code: string, language: string) => void;
 }
 
-const LeetCodeBadge: React.FC<{ source: NonNullable<Question['source']> }> = ({ source }) => (
-  <a
-    href={source.url}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 hover:bg-amber-500/20"
-  >
-    <ExternalLink size={10} />
-    LeetCode · {source.title}
-  </a>
-);
+export type EditorHandle = { ask: (index: number) => void };
 
-const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth, apiFetch, onManageQuestions, onCodeChange }) => {
+const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth, apiFetch, onQuestionUpdate, onCodeChange, ref }) => {
   const [code, setCode] = useState<string>(
     initialCode ?? '// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();',
   );
@@ -48,6 +41,9 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
   const [current, setCurrent] = useState<AskedQuestion | null>(null);
   const [connection, setConnection] = useState<'connecting' | 'live' | 'refused'>('connecting');
   const socketRef = useRef<Socket | null>(null);
+  // Read from the socket listener, set up once per connection.
+  const onQuestionUpdateRef = useRef(onQuestionUpdate);
+  onQuestionUpdateRef.current = onQuestionUpdate;
   const isInterviewer = askableQuestions !== undefined;
   const currentSource = current ? askableQuestions?.[current.index]?.source : undefined;
 
@@ -68,7 +64,10 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
       setOutput(result);
       setIsConsoleOpen(true);
     });
-    socketRef.current.on('question-update', (q: AskedQuestion) => setCurrent(q));
+    socketRef.current.on('question-update', (q: AskedQuestion) => {
+      setCurrent(q);
+      onQuestionUpdateRef.current?.(q);
+    });
 
     return () => {
       socketRef.current?.disconnect();
@@ -96,6 +95,7 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
       question: { index, text: q.text, category: q.category, difficulty: q.difficulty },
     });
   };
+  useImperativeHandle(ref, () => ({ ask }));
 
   const handleLanguageChange = (newLang: string) => {
     setLanguage(newLang);
@@ -174,61 +174,6 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
       </div>
 
       <div className="flex-1 flex min-h-0">
-      {isInterviewer && (
-        <aside className="w-60 shrink-0 bg-[#252526] border-r border-white/5 flex flex-col min-h-0">
-          <div className="h-9 flex items-center gap-2 px-3 border-b border-white/5 text-[11px] font-bold uppercase tracking-widest text-slate-400">
-            <ListChecks size={13} className="text-brand" />
-            Questions
-            {onManageQuestions && askableQuestions!.length > 0 && (
-              <button
-                onClick={onManageQuestions}
-                className="ml-auto flex items-center gap-1 normal-case tracking-normal font-semibold text-[11px] text-brand hover:text-white"
-              >
-                <Sparkles size={11} /> Edit / regenerate
-              </button>
-            )}
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {askableQuestions!.length === 0 && (
-              <div className="p-2 space-y-2">
-                <p className="text-xs text-slate-500">No questions for this interview yet.</p>
-                {onManageQuestions && (
-                  <button
-                    onClick={onManageQuestions}
-                    className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-brand hover:bg-brand-hover px-3 py-2 text-xs font-semibold text-white"
-                  >
-                    <Sparkles size={13} /> Generate with AI
-                  </button>
-                )}
-              </div>
-            )}
-            {askableQuestions!.map((q, i) => (
-              <div
-                key={i}
-                className={`rounded-lg border p-2 text-xs ${current?.index === i ? 'border-brand/60 bg-brand/10' : 'border-white/5 bg-white/[0.03]'}`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-slate-500">
-                    {i + 1}. {q.category} · {q.difficulty}
-                  </span>
-                  <button
-                    onClick={() => ask(i)}
-                    className="rounded-md bg-brand hover:bg-brand-hover px-2 py-0.5 text-[11px] font-semibold text-white"
-                  >
-                    {current?.index === i ? 'Asked' : 'Ask'}
-                  </button>
-                </div>
-                <p className="text-slate-300 line-clamp-2">{q.text}</p>
-                {q.source && (
-                  <div className="mt-1">
-                    <LeetCodeBadge source={q.source} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </aside>
-      )}
 
       {/* Editor & Console Split */}
       <div className="flex-1 flex flex-col min-h-0 relative">
@@ -246,7 +191,7 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
                 <p className="text-sm text-slate-100 whitespace-pre-wrap">{current.text}</p>
               </>
             ) : (
-              <p className="text-xs text-slate-500">Click Ask on a question to show it to the candidate.</p>
+              <p className="text-xs text-slate-500">Pick a question in the Questions panel to show it to the candidate.</p>
             )}
           </div>
         )}

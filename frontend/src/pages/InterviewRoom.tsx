@@ -10,13 +10,14 @@ import {
 } from '@stream-io/video-react-sdk';
 import { useUser } from '@clerk/react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, Code, PenTool, FileText, Loader2, Save, UserPlus, Check, Copy, X, Bot } from 'lucide-react';
+import { Video, Code, PenTool, FileText, Loader2, Save, UserPlus, Check, Copy, X, Bot, ListChecks } from 'lucide-react';
 import { useApi } from '../lib/api';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 
 const apiKey = import.meta.env.VITE_STREAM_API_KEY;
 
-import CollaborativeEditor from '../components/CollaborativeEditor';
+import CollaborativeEditor, { type EditorHandle } from '../components/CollaborativeEditor';
+import { QuestionList } from '../components/QuestionList';
 import Whiteboard from '../components/Whiteboard';
 import type { Question } from '../lib/questions';
 import QuestionsPanel from '../components/QuestionsPanel';
@@ -144,9 +145,18 @@ export const InterviewRoom: React.FC = () => {
   const [client, setClient] = React.useState<StreamVideoClient | null>(null);
   const [call, setCall] = React.useState<any>(null);
   const [activeTab, setActiveTab] = React.useState<'code' | 'design'>('code');
-  // The AI interviewer panel: the candidate's session, read-only. Mounted on first open.
-  const [showAi, setShowAi] = React.useState(false);
+  // The panel under the video: the interview's questions, or the AI interviewer (the
+  // candidate's session, read-only; mounted on first open, then kept so it keeps following).
+  const [sideTab, setSideTab] = React.useState<'questions' | 'ai'>('questions');
   const [aiOpened, setAiOpened] = React.useState(false);
+  const showSideTab = (tab: 'questions' | 'ai') => {
+    setSideTab(tab);
+    if (tab === 'ai') setAiOpened(true);
+  };
+  // Asking goes through the editor's live connection; the list highlights what's on screen.
+  const editorRef = React.useRef<EditorHandle>(null);
+  const [askedIndex, setAskedIndex] = React.useState<number | null>(null);
+  const onQuestionUpdate = React.useCallback((q: { index: number }) => setAskedIndex(q.index), []);
   const [showReport, setShowReport] = React.useState(false);
   const [showQuestions, setShowQuestions] = React.useState(false);
   const [interviewData, setInterviewData] = React.useState<{
@@ -163,7 +173,7 @@ export const InterviewRoom: React.FC = () => {
   // The candidate already started the AI interviewer: show it without a click.
   const openAi = React.useCallback(() => {
     setAiOpened(true);
-    setShowAi(true);
+    setSideTab('ai');
   }, []);
   useAiAutoOpen(apiFetch, id || '', isInterviewer, openAi);
 
@@ -356,58 +366,75 @@ export const InterviewRoom: React.FC = () => {
                     <PenTool size={16} />
                     System Design
                   </button>
-                  {isInterviewer && (
-                  <button
-                    onClick={() => {
-                      setShowAi((open) => !open);
-                      setAiOpened(true);
-                    }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      showAi ? 'bg-violet-500/20 text-violet-200' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                    }`}
-                    title={showAi ? 'Hide the AI interviewer' : 'Show the AI interviewer'}
-                  >
-                    <Bot size={16} />
-                    AI interviewer
-                  </button>
-                  )}
                 </div>
 
                 {/* Active Workspace */}
-                <div className="flex-1 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex">
-                  <div className="flex-1 min-w-0">
-                    {activeTab === 'code' ? (
-                      <CollaborativeEditor
-                        roomId={id || 'default'}
-                        initialCode={interviewData?.codeSnapshot ?? undefined}
-                        initialLanguage={interviewData?.codeLanguage ?? undefined}
-                        askableQuestions={isInterviewer ? interviewData?.questions ?? [] : undefined}
-                        socketAuth={socketAuth}
-                        apiFetch={apiFetch}
-                        onManageQuestions={isInterviewer ? () => setShowQuestions(true) : undefined}
-                      />
-                    ) : (
-                      <Whiteboard />
-                    )}
-                  </div>
-                  {isInterviewer && aiOpened && (
-                    <div className={showAi ? 'w-[24rem] shrink-0 border-l border-white/5' : 'hidden'}>
-                      <AiInterviewerPanel apiFetch={apiFetch} interviewId={id || ''} role="interviewer" />
-                    </div>
+                <div className="flex-1 min-h-0 rounded-2xl overflow-hidden border border-white/5 shadow-inner">
+                  {activeTab === 'code' ? (
+                    <CollaborativeEditor
+                      ref={editorRef}
+                      roomId={id || 'default'}
+                      initialCode={interviewData?.codeSnapshot ?? undefined}
+                      initialLanguage={interviewData?.codeLanguage ?? undefined}
+                      askableQuestions={isInterviewer ? interviewData?.questions ?? [] : undefined}
+                      socketAuth={socketAuth}
+                      apiFetch={apiFetch}
+                      onQuestionUpdate={onQuestionUpdate}
+                    />
+                  ) : (
+                    <Whiteboard />
                   )}
                 </div>
               </div>
 
-              {/* Right Column: Video & Controls */}
-              <div className="w-1/3 h-full flex flex-col p-2 overflow-hidden relative">
-                <div className="flex-1 bg-slate-900 rounded-2xl overflow-hidden border border-white/5 relative shadow-inner flex flex-col">
+              {/* Right Column: video on top, questions / AI interviewer below */}
+              <div className="w-1/3 h-full flex flex-col gap-2 p-2 overflow-hidden relative">
+                <div className="h-[42%] min-h-[14rem] shrink-0 bg-slate-900 rounded-2xl overflow-hidden border border-white/5 relative shadow-inner flex flex-col">
                   <div className="flex-1 min-h-0">
                     <SpeakerLayout />
                   </div>
-                  <div className="h-20 bg-slate-800/80 backdrop-blur-md border-t border-white/10 flex items-center justify-center">
+                  <div className="h-16 bg-slate-800/80 backdrop-blur-md border-t border-white/10 flex items-center justify-center">
                     <CallControls onLeave={handleEndSession} />
                   </div>
                 </div>
+
+                {isInterviewer && (
+                  <div className="flex-1 min-h-0 bg-[#1e1e1e] rounded-2xl overflow-hidden border border-white/5 flex flex-col">
+                    <div className="shrink-0 flex gap-1 p-1 bg-[#252526] border-b border-white/5">
+                      {([
+                        ['questions', <ListChecks key="i" size={14} />, `Questions (${interviewData?.questions?.length ?? 0})`],
+                        ['ai', <Bot key="i" size={14} />, 'AI interviewer'],
+                      ] as const).map(([tab, icon, label]) => (
+                        <button
+                          key={tab}
+                          onClick={() => showSideTab(tab)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            sideTab === tab ? 'bg-brand text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                          }`}
+                        >
+                          {icon}
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      {sideTab === 'questions' && (
+                        <QuestionList
+                          questions={interviewData?.questions ?? []}
+                          currentIndex={askedIndex}
+                          canAsk={activeTab === 'code'}
+                          onAsk={(index) => editorRef.current?.ask(index)}
+                          onManage={() => setShowQuestions(true)}
+                        />
+                      )}
+                      {aiOpened && (
+                        <div className={sideTab === 'ai' ? 'h-full' : 'hidden'}>
+                          <AiInterviewerPanel apiFetch={apiFetch} interviewId={id || ''} role="interviewer" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
