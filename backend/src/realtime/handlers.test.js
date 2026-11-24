@@ -233,6 +233,32 @@ describe("interviewer presence", () => {
     expect(presence()).toEqual([["room:r1", "interviewer-presence", { present: false }]]);
   });
 
+  it("ignores a socket that disconnected while its access check was pending", async () => {
+    const socket = fakeSocket("s1");
+    ctx.canAccessRoom.mockImplementation(async () => {
+      socket.disconnected = true;
+      createDisconnectHandler(ctx)(socket)();
+      return true;
+    });
+    await createJoinRoomHandler(ctx)(socket)("r1");
+    expect(ctx.roomOwners.has("r1")).toBe(false);
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(presence()).toEqual([]);
+  });
+
+  it("moves an owner socket's count when it joins another room, and leaves the right room on disconnect", async () => {
+    const socket = fakeSocket("s1");
+    await createJoinRoomHandler(ctx)(socket)("r1");
+    events = [];
+    await createJoinRoomHandler(ctx)(socket)("r2");
+    expect(presence()).toEqual([
+      ["room:r1", "interviewer-presence", { present: false }],
+      ["room:r2", "interviewer-presence", { present: true }],
+    ]);
+    createDisconnectHandler(ctx)(socket)();
+    expect(ctx.roomOwners.size).toBe(0);
+  });
+
   it("a candidate leaving does not change presence", async () => {
     await createJoinRoomHandler(ctx)(fakeSocket("s1"))("r1");
     const c = fakeSocket("s9", candidate);

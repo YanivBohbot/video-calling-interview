@@ -6,10 +6,12 @@ import { clearCurrentQuestion, clearAskedQuestions } from "../roomQuestions.js";
 export const createDisconnectHandler = ({ io, roomState, roomQuestions, askedQuestions, roomOwners, interviewStore }) => (socket) => () => {
   console.log("User disconnected:", socket.id);
   const roomId = socket.data.roomId;
-  if (!roomId) return;
-  if (socket.data.isOwner && removeOwner(roomOwners, roomId) === 0) {
-    io.to(roomId).emit("interviewer-presence", { present: false });
+  // The count sits on the room the owner was counted in, which a later join may not be.
+  const ownerRoomId = socket.data.ownerRoomId;
+  if (ownerRoomId !== undefined && removeOwner(roomOwners, ownerRoomId) === 0) {
+    io.to(ownerRoomId).emit("interviewer-presence", { present: false });
   }
+  if (!roomId) return;
   const room = io.sockets.adapter.rooms.get(roomId);
   if (room && room.size > 0) return;
 
