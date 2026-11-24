@@ -6,6 +6,9 @@ import { CANDIDATE } from "../auth/principal.js";
 export const MAX_SESSIONS_PER_INTERVIEW = 1;
 export const SESSION_MS = 60 * 60 * 1000;
 export const MAX_MESSAGES = 60;
+// Avatar reconnects (a new LiveAvatar token for the same session) and the shortest avatar session.
+export const MAX_AVATAR_TOKENS = 10;
+const MIN_AVATAR_SECONDS = 60;
 
 // The AI interviewer of an interview room. The invited candidate of the interview talks to
 // it; the interview's owner follows the conversation and alone reads the report. Anyone
@@ -13,6 +16,9 @@ export const MAX_MESSAGES = 60;
 // ({ review }). `askedQuestionOf(interviewId)`: the question the interviewer put on screen
 // in the room (realtime), if any. The report is written in the background once a session ends;
 // `runInBackground` is injectable so tests can await it.
+// Avatar mode: the candidate runs the whole interview with a LiveAvatar avatar voicing the agent.
+// `isInterviewerPresent(interviewId)` (realtime) gates its start; `liveAvatar`
+// ({ createSessionToken }) trades the server-side key for a browser token, null when not configured.
 export const createPracticeService = ({
   practiceSessionRepository: sessions,
   interviewRepository,
@@ -20,6 +26,8 @@ export const createPracticeService = ({
   coach,
   messageLimiter,
   askedQuestionOf = () => undefined,
+  isInterviewerPresent = () => false,
+  liveAvatar = null,
   now = () => Date.now(),
   runInBackground = (fn) => void fn(),
 }) => {
@@ -36,13 +44,15 @@ export const createPracticeService = ({
   // The interview, if the caller may see its AI: its invited candidate or its owner.
   // `write` (start, send) is the candidate's alone.
   // `ownerOnly` (the report) is the interviewer's alone.
-  const loadInterview = async (principal, interviewId, { write = false, ownerOnly = false } = {}) => {
+  // `candidateOnly` (avatar tokens) refuses the owner with a plain Forbidden.
+  const loadInterview = async (principal, interviewId, { write = false, ownerOnly = false, candidateOnly = false } = {}) => {
     const isCandidate = principal.kind === CANDIDATE;
     if (isCandidate && principal.interviewId !== interviewId) throw notFound();
     const interview = await interviewRepository.findById(interviewId);
     if (!interview || (!isCandidate && interview.interviewerId !== principal.userId)) throw notFound();
     if (write && !isCandidate) throw new AppError(403, "Only the candidate talks to the AI interviewer");
     if (ownerOnly && isCandidate) throw new AppError(403, "Forbidden");
+    if (candidateOnly && !isCandidate) throw new AppError(403, "Forbidden");
     return interview;
   };
 
@@ -62,6 +72,22 @@ export const createPracticeService = ({
     return pick ? { text: pick.text, category: pick.category, difficulty: pick.difficulty } : null;
   };
 
+  // The interview's questions as the agent may see them: never their LeetCode source. The
+  // agent's `present_question` index points into this array, so nothing is filtered out.
+  const questionsOf = (interview) =>
+    (Array.isArray(interview.questions) ? interview.questions : []).map((q) => ({
+      text: q?.text,
+      category: q?.category,
+      difficulty: q?.difficulty,
+    }));
+  // The question at `index`, as shown to the candidate; null when out of range.
+  const presentedAt = (interview, index) => {
+    const questions = questionsOf(interview);
+    if (!Number.isInteger(index) || index < 0 || index >= questions.length) return null;
+    return { index, ...questions[index] };
+  };
+  const avatarUnavailable = () => new AppError(503, "The avatar is unavailable");
+
   const writeReport = async (sessionId) => {
     try {
       const transcript = await interviewer.history(sessionId);
@@ -79,11 +105,24 @@ export const createPracticeService = ({
     if (await sessions.finish(sessionId)) runInBackground(() => writeReport(sessionId));
   };
 
-  const start = async (principal, interviewId, { language }) => {
-    await loadInterview(principal, interviewId, { write: true });
+  // Avatar refusals come before the session is created: a refused start must not use up the
+  // interview's one session.
+  const checkAvatarStart = (interview) => {
+    if (!interview.aiInterviewerEnabled) throw new AppError(403, "The AI interviewer is not enabled for this interview");
+    if (!Array.isArray(interview.questions) || interview.questions.length === 0) {
+      throw new ConflictError("This interview has no questions yet");
+    }
+    if (isInterviewerPresent(interview.id)) throw new ConflictError("Your interviewer is in the room");
+    if (!liveAvatar) throw avatarUnavailable();
+  };
+
+  const start = async (principal, interviewId, { language, mode = "text" }) => {
+    const interview = await loadInterview(principal, interviewId, { write: true });
+    if (mode === "avatar") checkAvatarStart(interview);
     const result = await sessions.startExclusive({
       interviewId,
       language,
+      mode,
       max: MAX_SESSIONS_PER_INTERVIEW,
       // An active session older than this was abandoned (tab closed): closed, not blocking.
       staleBefore: new Date(now() - SESSION_MS),
@@ -111,7 +150,7 @@ export const createPracticeService = ({
   };
 
   const get = async (principal, interviewId, sessionId) => {
-    let { session } = await loadSession(principal, interviewId, sessionId);
+    let { interview, session } = await loadSession(principal, interviewId, sessionId);
     if (session.status === "active" && isOver(session)) {
       await close(session.id); // time is up even if the candidate never wrote again
       session = { ...session, status: "finished" };
@@ -122,6 +161,8 @@ export const createPracticeService = ({
       id: session.id,
       status: session.status,
       language: session.language,
+      mode: session.mode,
+      ...(session.mode === "avatar" && { presentedQuestion: presentedAt(interview, session.presentedIndex) }),
       code: session.code,
       startedAt: session.startedAt,
       finishedAt: session.finishedAt,
@@ -166,6 +207,10 @@ export const createPracticeService = ({
       interviewType: interview.interviewType ?? "technical",
       question,
       questionChanged,
+      mode: session.mode,
+      company: interview.company ?? "",
+      interviewLanguage: interview.interviewLanguage ?? "en",
+      questions: questionsOf(interview),
       signal,
     });
     return (async function* () {
@@ -175,6 +220,14 @@ export const createPracticeService = ({
           // Noted at the tool call: the candidate may disconnect during the goodbye.
           if (event.type === "tool" && event.endsSession) ended = true;
           if (event.type === "done" && event.ended) ended = true;
+          // The avatar interviewer moved to another question: remembered, and shown on screen.
+          if (event.type === "question") {
+            const question = presentedAt(interview, event.index);
+            if (!question) continue;
+            await sessions.savePresentedIndex(session.id, question.index);
+            yield { type: "question", question };
+            continue;
+          }
           yield event;
         }
       } finally {
@@ -192,6 +245,29 @@ export const createPracticeService = ({
     return { reportStatus: "pending" };
   };
 
+  // A LiveAvatar session token for the candidate's active avatar session (also to reconnect a
+  // dropped avatar: the owner-presence check is only at start). The API key stays here.
+  const avatarToken = async (principal, interviewId, sessionId) => {
+    const { interview, session } = await loadSession(principal, interviewId, sessionId, { candidateOnly: true });
+    if (!interview.aiInterviewerEnabled) throw new AppError(403, "The AI interviewer is not enabled for this interview");
+    if (session.status !== "active" || session.mode !== "avatar") throw new ConflictError("Not an avatar session");
+    if (isOver(session)) {
+      await close(session.id);
+      throw new ConflictError("Session time is over");
+    }
+    if (!liveAvatar) throw avatarUnavailable();
+    if (!(await sessions.claimAvatarToken(session.id, { max: MAX_AVATAR_TOKENS }))) {
+      throw new ConflictError("Avatar reconnect limit reached");
+    }
+    const remainingMs = SESSION_MS - (now() - new Date(session.startedAt).getTime());
+    const language = interview.interviewLanguage ?? "en";
+    const { sessionToken } = await liveAvatar.createSessionToken({
+      language,
+      maxSeconds: Math.max(MIN_AVATAR_SECONDS, Math.floor(remainingMs / 1000)),
+    });
+    return { sessionToken, language };
+  };
+
   // The candidate or the owner may end the session.
   const finish = async (principal, interviewId, sessionId) => {
     const { session } = await loadSession(principal, interviewId, sessionId);
@@ -199,5 +275,5 @@ export const createPracticeService = ({
     return { status: "finished" };
   };
 
-  return { start, current, get, streamMessage, finish, retryReport };
+  return { start, current, get, streamMessage, finish, retryReport, avatarToken };
 };

@@ -33,6 +33,7 @@ import { createQuestionRouter } from "./routes/question.routes.js";
 import { createStreamRouter } from "./routes/stream.routes.js";
 import { createCodeRouter } from "./routes/code.routes.js";
 import { createPistonClient } from "./integrations/piston/client.js";
+import { createLiveAvatarClient } from "./integrations/liveavatar/client.js";
 import { createLeetCodeClient } from "./integrations/leetcode/client.js";
 import { createAuthRouter } from "./routes/auth.routes.js";
 import { createPracticeService } from "./services/practice.service.js";
@@ -61,6 +62,7 @@ const PRACTICE_MESSAGES_PER_MINUTE = 10;
 // (AI pipeline, Clerk, Stream client, code runner, clock) while keeping everything else real.
 // `leetcode` replaces the LeetCode GraphQL client (tests).
 // `practiceInterviewer` / `practiceCoach` replace the two practice agents (tests).
+// `liveAvatar` replaces the LiveAvatar token client (tests; null = avatar unavailable).
 // `identityResolver` replaces the whole credential check — HTTP tests use it to act as a
 // given principal without minting real tokens (the real resolver has its own tests).
 export const createContainer = ({
@@ -74,6 +76,7 @@ export const createContainer = ({
   leetcode,
   practiceInterviewer,
   practiceCoach,
+  liveAvatar,
   now,
 }) => {
   // ── Repositories ──────────────────────────────────────────────────────────
@@ -86,6 +89,8 @@ export const createContainer = ({
 
   // ── External clients ──────────────────────────────────────────────────────
   const runner = codeRunner ?? createPistonClient({ baseUrl: config.pistonUrl });
+  // null when LIVEAVATAR_API_KEY is unset: avatar mode is then unavailable.
+  const avatarClient = liveAvatar !== undefined ? liveAvatar : createLiveAvatarClient({ ...config.liveAvatar });
   let leetcodeClient;
   const getLeetCode = () => (leetcodeClient ??= leetcode ?? createLeetCodeClient());
 
@@ -211,6 +216,7 @@ export const createContainer = ({
     messageLimiter: createRateLimiter({ max: PRACTICE_MESSAGES_PER_MINUTE, windowMs: ONE_MINUTE_MS }),
     askedQuestionOf: (interviewId) => roomQuestions.get(interviewId),
     isInterviewerPresent: (interviewId) => isOwnerPresent(roomOwners, interviewId),
+    liveAvatar: avatarClient,
     now,
   });
 

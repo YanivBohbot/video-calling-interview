@@ -5,10 +5,11 @@ const AGENT_UNAVAILABLE = "The interviewer is unavailable right now.";
 
 const sse = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
-// Each agent event becomes one server-sent event: token, tool, done (see the agent's README).
+// Each agent event becomes one server-sent event: token, tool, question, done (see the agent's README).
 const eventData = (event) => {
   if (event.type === "token") return { text: event.text };
   if (event.type === "tool") return { name: event.name };
+  if (event.type === "question") return event.question;
   return { ended: event.ended, limited: event.limited };
 };
 
@@ -27,6 +28,10 @@ export const createPracticeController = ({ practiceService }) => ({
 
   finish: handle("Error ending the AI interviewer session", async (req, res) => {
     res.status(200).json(await practiceService.finish(req.principal, req.params.id, req.params.sid));
+  }),
+
+  avatarToken: handle("Error starting the avatar", async (req, res) => {
+    res.status(200).json(await practiceService.avatarToken(req.principal, req.params.id, req.params.sid));
   }),
 
   retryReport: handle("Error retrying the AI interviewer report", async (req, res) => {

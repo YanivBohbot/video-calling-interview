@@ -123,7 +123,7 @@ describe("practice service — start", () => {
   it("starts a session atomically with the interview's caps", async () => {
     const session = await service.start(CANDIDATE, "iv-1", { language: "python" });
     expect(repo.startExclusive).toHaveBeenCalledWith({
-      interviewId: "iv-1", language: "python", max: 1, staleBefore: new Date(NOW - 60 * MIN),
+      interviewId: "iv-1", language: "python", mode: "text", max: 1, staleBefore: new Date(NOW - 60 * MIN),
     });
     expect(session.id).toBe("s1");
   });
