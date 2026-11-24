@@ -47,7 +47,9 @@ export const attachRealtime = ({
   // Every connection must present a credential.
   io.use(authenticator);
 
-  const ctx = { io, roomState, roomQuestions, interviewStore, findCodeSnapshot, canAccessRoom };
+  // Every question asked so far per room (the candidate's "Questions" menu).
+  const askedQuestions = new Map();
+  const ctx = { io, roomState, roomQuestions, askedQuestions, interviewStore, findCodeSnapshot, canAccessRoom };
   const handlers = Object.entries(EVENTS).map(([event, factory]) => [event, factory(ctx)]);
 
   io.on("connection", (socket) => {

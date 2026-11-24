@@ -15,3 +15,15 @@ export const sanitizeAskedQuestion = (raw) => {
 export const setCurrentQuestion = (map, roomId, question) => map.set(roomId, question);
 export const getCurrentQuestion = (map, roomId) => map.get(roomId);
 export const clearCurrentQuestion = (map, roomId) => map.delete(roomId);
+
+// Every question asked in a room so far, once each, in the order first asked: the
+// candidate can look back at them (never at questions not asked yet).
+export const recordAskedQuestion = (map, roomId, question) => {
+  const list = map.get(roomId) ?? [];
+  const known = list.some((q) => q.index === question.index && q.text === question.text);
+  const next = known ? list : [...list, question];
+  map.set(roomId, next);
+  return next;
+};
+export const getAskedQuestions = (map, roomId) => map.get(roomId) ?? [];
+export const clearAskedQuestions = (map, roomId) => map.delete(roomId);

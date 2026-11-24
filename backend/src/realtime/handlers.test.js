@@ -34,6 +34,7 @@ beforeEach(() => {
     },
     roomState: new Map(),
     roomQuestions: new Map(),
+    askedQuestions: new Map(),
     interviewStore: { update: vi.fn().mockResolvedValue({}) },
     findCodeSnapshot: vi.fn(),
     // Rooms the principal may enter: owners their interviews, a candidate only theirs.
@@ -46,6 +47,7 @@ beforeEach(() => {
 describe("join-room", () => {
   it("replays the current question first, then live code — without touching the database", async () => {
     ctx.roomQuestions.set("r1", QUESTION);
+    ctx.askedQuestions.set("r1", [QUESTION]);
     ctx.roomState.set("r1", { code: "live()", language: "python", dirty: true });
     const socket = fakeSocket();
     await createJoinRoomHandler(ctx)(socket)("r1");
@@ -53,6 +55,7 @@ describe("join-room", () => {
     expect(socket.data.roomId).toBe("r1");
     expect(events).toEqual([
       ["self", "question-update", QUESTION],
+      ["self", "questions-asked", [QUESTION]],
       ["self", "code-update", "live()"],
       ["self", "language-update", "python"],
     ]);
@@ -109,7 +112,22 @@ describe("question-change", () => {
     const socket = fakeSocket();
     socket.rooms.add("r1");
     createQuestionChangeHandler(ctx)(socket)({ roomId: "r1", question: { ...QUESTION, source: { secret: true } } });
-    expect(events).toEqual([["room:r1", "question-update", QUESTION]]);
+    expect(events).toEqual([
+      ["room:r1", "question-update", QUESTION],
+      ["room:r1", "questions-asked", [QUESTION]],
+    ]);
+    expect(ctx.roomQuestions.get("r1")).toEqual(QUESTION);
+  });
+
+  it("keeps every question asked so far, once each, in the order they were first asked", () => {
+    const socket = fakeSocket();
+    socket.rooms.add("r1");
+    const SECOND = { index: 3, text: "Merge intervals", category: "technical", difficulty: "medium" };
+    const ask = (question) => createQuestionChangeHandler(ctx)(socket)({ roomId: "r1", question });
+    ask(QUESTION);
+    ask(SECOND);
+    ask(QUESTION); // asked again: back on screen, not listed twice
+    expect(events.at(-1)).toEqual(["room:r1", "questions-asked", [QUESTION, SECOND]]);
     expect(ctx.roomQuestions.get("r1")).toEqual(QUESTION);
   });
 
@@ -141,10 +159,12 @@ describe("disconnect", () => {
     const socket = fakeSocket();
     socket.data.roomId = "r1";
     ctx.roomQuestions.set("r1", QUESTION);
+    ctx.askedQuestions.set("r1", [QUESTION]);
     ctx.roomState.set("r1", { code: "c", language: "js", dirty: true });
     createDisconnectHandler(ctx)(socket)();
     await vi.waitFor(() => expect(ctx.roomState.has("r1")).toBe(false));
     expect(ctx.roomQuestions.has("r1")).toBe(false);
+    expect(ctx.askedQuestions.has("r1")).toBe(false);
     expect(ctx.interviewStore.update).toHaveBeenCalledWith({
       where: { id: "r1" },
       data: { codeSnapshot: "c", codeLanguage: "js" },

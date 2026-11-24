@@ -9,11 +9,15 @@ import {
   type Call,
 } from '@stream-io/video-react-sdk';
 import { useParams } from 'react-router-dom';
-import { Video, Code, PenTool, Link2Off, LogOut, Bot } from 'lucide-react';
+import { Video, Code, PenTool, Link2Off, LogOut, Bot, ListChecks, ChevronDown } from 'lucide-react';
 import '@stream-io/video-react-sdk/dist/css/styles.css';
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import Whiteboard from '../components/Whiteboard';
 import { AiInterviewerPanel } from '../components/ai/AiInterviewerPanel';
+import { QuestionBanner } from '../components/QuestionBanner';
+import { AskedQuestionList } from '../components/AskedQuestionList';
+import { tabForQuestion, hasUnseenQuestions } from '../lib/roomQuestions';
+import type { AskedQuestion } from '../lib/questions';
 import { useAiAutoOpen } from '../lib/useAiAutoOpen';
 import { useApi } from '../lib/api';
 import { readInvite, storeInvite } from '../lib/storage';
@@ -73,6 +77,21 @@ export const CandidateRoom: React.FC = () => {
     codeRef.current = { code, language };
   }, []);
   const getCode = React.useCallback(() => codeRef.current, []);
+  // The interviewer's questions: the one on screen (banner; the room opens the tab it
+  // needs) and the ones asked so far (Questions menu, which blinks while some are unseen).
+  const [current, setCurrent] = React.useState<AskedQuestion | null>(null);
+  const [asked, setAsked] = React.useState<AskedQuestion[]>([]);
+  const [seenCount, setSeenCount] = React.useState(0);
+  const [questionMenu, setQuestionMenu] = React.useState(false);
+  const onQuestionUpdate = React.useCallback((q: AskedQuestion) => {
+    setCurrent(q);
+    const tab = tabForQuestion(q.category);
+    if (tab) setActiveTab(tab);
+  }, []);
+  const toggleQuestionMenu = () => {
+    setQuestionMenu((open) => !open);
+    setSeenCount(asked.length);
+  };
   // A session already exists (the room was reloaded): show it without a click.
   const openAi = React.useCallback(() => {
     setAiOpened(true);
@@ -185,6 +204,30 @@ export const CandidateRoom: React.FC = () => {
             <div className="flex-1 flex overflow-hidden">
               <div className="w-2/3 h-full p-2 flex flex-col gap-2">
                 <div className="bg-slate-900 rounded-xl p-1 flex gap-1 w-fit border border-white/5">
+                  <div className="relative">
+                    <button
+                      onClick={toggleQuestionMenu}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        questionMenu
+                          ? 'bg-white/10 text-white'
+                          : hasUnseenQuestions(asked.length, seenCount)
+                            ? 'bg-brand/20 text-violet-100 ring-2 ring-brand animate-pulse'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                      }`}
+                    >
+                      <ListChecks size={16} />
+                      Questions ({asked.length})
+                      <ChevronDown size={14} />
+                    </button>
+                    {questionMenu && (
+                      <>
+                        <button aria-label="Close questions" className="fixed inset-0 z-40 cursor-default" onClick={() => setQuestionMenu(false)} />
+                        <div className="absolute left-0 top-full mt-2 z-50 w-[28rem] max-h-[min(32rem,70vh)] rounded-xl border border-white/10 bg-[#1e1e1e] shadow-2xl overflow-hidden">
+                          <AskedQuestionList asked={asked} current={current} />
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <button
                     onClick={() => setActiveTab('code')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -209,7 +252,11 @@ export const CandidateRoom: React.FC = () => {
                       setAiOpened(true);
                     }}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      showAi ? 'bg-violet-500/20 text-violet-200' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                      showAi
+                        ? 'bg-violet-500/20 text-violet-200'
+                        : !aiOpened
+                          ? 'bg-brand/20 text-violet-100 ring-2 ring-brand animate-pulse'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                     }`}
                     title={showAi ? 'Hide the AI interviewer' : 'Show the AI interviewer'}
                   >
@@ -217,9 +264,11 @@ export const CandidateRoom: React.FC = () => {
                     AI interviewer
                   </button>
                 </div>
-                <div className="flex-1 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex">
+                <QuestionBanner current={current} />
+                {/* The editor stays mounted on every tab: it holds the live connection. */}
+                <div className="flex-1 min-h-0 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex">
                   <div className="flex-1 min-w-0">
-                    {activeTab === 'code' ? (
+                    <div className={activeTab === 'code' ? 'h-full' : 'hidden'}>
                       <CollaborativeEditor
                         roomId={id}
                         initialCode={room.codeSnapshot ?? undefined}
@@ -227,10 +276,11 @@ export const CandidateRoom: React.FC = () => {
                         socketAuth={socketAuth}
                         apiFetch={apiFetch}
                         onCodeChange={onCodeChange}
+                        onQuestionUpdate={onQuestionUpdate}
+                        onQuestionsAsked={setAsked}
                       />
-                    ) : (
-                      <Whiteboard />
-                    )}
+                    </div>
+                    {activeTab === 'design' && <Whiteboard />}
                   </div>
                   {aiOpened && (
                     <div className={showAi ? 'w-[24rem] shrink-0 border-l border-white/5' : 'hidden'}>

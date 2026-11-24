@@ -2,7 +2,6 @@ import React, { useEffect, useImperativeHandle, useState, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { io, Socket } from 'socket.io-client';
 import { Code, Play, Copy } from 'lucide-react';
-import { LeetCodeBadge } from './LeetCodeBadge';
 import type { Question, AskedQuestion } from '../lib/questions';
 import { API_URL } from '../lib/config';
 import type { ApiFetch } from '../lib/api';
@@ -13,24 +12,24 @@ interface CodeEditorProps {
   roomId: string;
   initialCode?: string;
   initialLanguage?: string;
-  // Set for the interviewer only: their approved questions, each askable. The candidate
-  // never receives this list, and the server strips the LeetCode source from asks.
-  askableQuestions?: Question[];
   // Sends a fresh credential on every (re)connection (see useApi().socketAuth).
   socketAuth: SocketAuth;
   // Runs code through the backend (POST /api/code/run) with this page's credential.
   apiFetch: ApiFetch;
-  // Interviewer only: the question on screen changed (the room's question list highlights it).
+  // The question on screen changed / the list of questions asked so far changed. The room
+  // shows them (banner, Questions menu) and switches to the tab a question needs.
   onQuestionUpdate?: (question: AskedQuestion) => void;
-  // Interviewer only: `ask(index)` shows a question to everyone, from the room's question list.
+  onQuestionsAsked?: (asked: AskedQuestion[]) => void;
+  // Interviewer only: `ask(index, question)` shows a question to everyone (the server strips
+  // anything but index, text, category and difficulty, so never the LeetCode source).
   ref?: React.Ref<EditorHandle>;
   // Sees the editor's content whenever it changes (local edit, remote update, language).
   onCodeChange?: (code: string, language: string) => void;
 }
 
-export type EditorHandle = { ask: (index: number) => void };
+export type EditorHandle = { ask: (index: number, question: Question) => void };
 
-const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, askableQuestions, socketAuth, apiFetch, onQuestionUpdate, onCodeChange, ref }) => {
+const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, socketAuth, apiFetch, onQuestionUpdate, onQuestionsAsked, onCodeChange, ref }) => {
   const [code, setCode] = useState<string>(
     initialCode ?? '// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();',
   );
@@ -38,14 +37,13 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
   const [output, setOutput] = useState<string>('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
-  const [current, setCurrent] = useState<AskedQuestion | null>(null);
   const [connection, setConnection] = useState<'connecting' | 'live' | 'refused'>('connecting');
   const socketRef = useRef<Socket | null>(null);
-  // Read from the socket listener, set up once per connection.
+  // Read from the socket listeners, set up once per connection.
   const onQuestionUpdateRef = useRef(onQuestionUpdate);
   onQuestionUpdateRef.current = onQuestionUpdate;
-  const isInterviewer = askableQuestions !== undefined;
-  const currentSource = current ? askableQuestions?.[current.index]?.source : undefined;
+  const onQuestionsAskedRef = useRef(onQuestionsAsked);
+  onQuestionsAskedRef.current = onQuestionsAsked;
 
   useEffect(() => {
     const socket = io(API_URL, { auth: socketAuth });
@@ -64,10 +62,8 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
       setOutput(result);
       setIsConsoleOpen(true);
     });
-    socketRef.current.on('question-update', (q: AskedQuestion) => {
-      setCurrent(q);
-      onQuestionUpdateRef.current?.(q);
-    });
+    socketRef.current.on('question-update', (q: AskedQuestion) => onQuestionUpdateRef.current?.(q));
+    socketRef.current.on('questions-asked', (asked: AskedQuestion[]) => onQuestionsAskedRef.current?.(asked));
 
     return () => {
       socketRef.current?.disconnect();
@@ -87,9 +83,7 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
 
   // No local setCurrent: the server echoes the sanitized question to everyone,
   // the asker included, so all participants render the same thing.
-  const ask = (index: number) => {
-    const q = askableQuestions?.[index];
-    if (!q) return;
+  const ask = (index: number, q: Question) => {
     socketRef.current?.emit('question-change', {
       roomId,
       question: { index, text: q.text, category: q.category, difficulty: q.difficulty },
@@ -177,24 +171,6 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
 
       {/* Editor & Console Split */}
       <div className="flex-1 flex flex-col min-h-0 relative">
-        {(current || isInterviewer) && (
-          <div className="shrink-0 border-b border-white/5 bg-[#1b2433] px-4 py-3">
-            {current ? (
-              <>
-                <div className="flex items-center gap-2 mb-1 text-[10px] font-bold uppercase tracking-widest text-sky-300">
-                  Current question
-                  <span className="font-medium normal-case tracking-normal text-slate-400">
-                    {current.category} · {current.difficulty}
-                  </span>
-                  {currentSource && <LeetCodeBadge source={currentSource} />}
-                </div>
-                <p className="text-sm text-slate-100 whitespace-pre-wrap">{current.text}</p>
-              </>
-            ) : (
-              <p className="text-xs text-slate-500">Pick a question in the Questions menu to show it to the candidate.</p>
-            )}
-          </div>
-        )}
         <div className={`flex-1 transition-all duration-300 ${isConsoleOpen ? 'h-2/3' : 'h-full'}`}>
           <Editor
             height="100%"

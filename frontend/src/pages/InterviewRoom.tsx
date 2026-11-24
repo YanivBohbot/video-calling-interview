@@ -18,6 +18,9 @@ const apiKey = import.meta.env.VITE_STREAM_API_KEY;
 
 import CollaborativeEditor, { type EditorHandle } from '../components/CollaborativeEditor';
 import { QuestionList } from '../components/QuestionList';
+import { QuestionBanner } from '../components/QuestionBanner';
+import { tabForQuestion } from '../lib/roomQuestions';
+import type { AskedQuestion } from '../lib/questions';
 import Whiteboard from '../components/Whiteboard';
 import type { Question } from '../lib/questions';
 import QuestionsPanel from '../components/QuestionsPanel';
@@ -151,11 +154,16 @@ export const InterviewRoom: React.FC = () => {
   const [showReport, setShowReport] = React.useState(false);
   const [showQuestions, setShowQuestions] = React.useState(false);
   // The "Questions" menu of the tab bar: the list, each question askable. Asking goes through
-  // the editor's live connection; the list highlights what's on screen.
+  // the editor's live connection (the editor stays mounted on every tab for that). The
+  // question on screen shows above the workspace, and both rooms open the tab it needs.
   const [questionMenu, setQuestionMenu] = React.useState(false);
   const editorRef = React.useRef<EditorHandle>(null);
-  const [askedIndex, setAskedIndex] = React.useState<number | null>(null);
-  const onQuestionUpdate = React.useCallback((q: { index: number }) => setAskedIndex(q.index), []);
+  const [current, setCurrent] = React.useState<AskedQuestion | null>(null);
+  const onQuestionUpdate = React.useCallback((q: AskedQuestion) => {
+    setCurrent(q);
+    const tab = tabForQuestion(q.category);
+    if (tab) setActiveTab(tab);
+  }, []);
   const [interviewData, setInterviewData] = React.useState<{
     codeSnapshot?: string | null;
     codeLanguage?: string | null;
@@ -343,8 +351,48 @@ export const InterviewRoom: React.FC = () => {
             <div className="flex-1 flex overflow-hidden">
               {/* Left Column: Workspace */}
               <div className="w-2/3 h-full p-2 flex flex-col gap-2">
-                {/* Tab Selector */}
+                {/* Tab Selector — Questions first: it is where an interview starts. */}
                 <div className="bg-slate-900 rounded-xl p-1 flex gap-1 w-fit border border-white/5">
+                  {isInterviewer && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setQuestionMenu((open) => !open)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          questionMenu
+                            ? 'bg-white/10 text-white'
+                            : !current && (interviewData?.questions?.length ?? 0) > 0
+                              ? 'bg-brand/20 text-violet-100 ring-2 ring-brand animate-pulse'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                        }`}
+                        title={current ? undefined : 'Pick the first question to ask the candidate'}
+                      >
+                        <ListChecks size={16} />
+                        Questions ({interviewData?.questions?.length ?? 0})
+                        <ChevronDown size={14} />
+                      </button>
+                      {questionMenu && (
+                        <>
+                          {/* Click outside closes the menu. */}
+                          <button aria-label="Close questions" className="fixed inset-0 z-40 cursor-default" onClick={() => setQuestionMenu(false)} />
+                          <div className="absolute left-0 top-full mt-2 z-50 w-[28rem] h-[min(32rem,70vh)] rounded-xl border border-white/10 bg-[#1e1e1e] shadow-2xl overflow-hidden">
+                            <QuestionList
+                              questions={interviewData?.questions ?? []}
+                              currentIndex={current?.index ?? null}
+                              onAsk={(index) => {
+                                const question = interviewData?.questions?.[index];
+                                if (question) editorRef.current?.ask(index, question);
+                                setQuestionMenu(false);
+                              }}
+                              onManage={() => {
+                                setQuestionMenu(false);
+                                setShowQuestions(true);
+                              }}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                   <button
                     onClick={() => setActiveTab('code')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -364,41 +412,6 @@ export const InterviewRoom: React.FC = () => {
                     System Design
                   </button>
                   {isInterviewer && (
-                    <div className="relative">
-                      <button
-                        onClick={() => setQuestionMenu((open) => !open)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          questionMenu ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                        }`}
-                      >
-                        <ListChecks size={16} />
-                        Questions ({interviewData?.questions?.length ?? 0})
-                        <ChevronDown size={14} />
-                      </button>
-                      {questionMenu && (
-                        <>
-                          {/* Click outside closes the menu. */}
-                          <button aria-label="Close questions" className="fixed inset-0 z-40 cursor-default" onClick={() => setQuestionMenu(false)} />
-                          <div className="absolute left-0 top-full mt-2 z-50 w-[28rem] h-[min(32rem,70vh)] rounded-xl border border-white/10 bg-[#1e1e1e] shadow-2xl overflow-hidden">
-                            <QuestionList
-                              questions={interviewData?.questions ?? []}
-                              currentIndex={askedIndex}
-                              canAsk={activeTab === 'code'}
-                              onAsk={(index) => {
-                                editorRef.current?.ask(index);
-                                setQuestionMenu(false);
-                              }}
-                              onManage={() => {
-                                setQuestionMenu(false);
-                                setShowQuestions(true);
-                              }}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {isInterviewer && (
                   <button
                     onClick={() => {
                       setShowAi((open) => !open);
@@ -415,23 +428,30 @@ export const InterviewRoom: React.FC = () => {
                   )}
                 </div>
 
-                {/* Active Workspace */}
-                <div className="flex-1 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex">
+                {isInterviewer && (
+                  <QuestionBanner
+                    current={current}
+                    source={current ? interviewData?.questions?.[current.index]?.source : undefined}
+                    hint="Pick a question in the Questions menu to show it to the candidate."
+                  />
+                )}
+
+                {/* Active Workspace — the editor stays mounted on every tab: it holds the live
+                    connection (code, questions). */}
+                <div className="flex-1 min-h-0 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex">
                   <div className="flex-1 min-w-0">
-                    {activeTab === 'code' ? (
+                    <div className={activeTab === 'code' ? 'h-full' : 'hidden'}>
                       <CollaborativeEditor
                         ref={editorRef}
                         roomId={id || 'default'}
                         initialCode={interviewData?.codeSnapshot ?? undefined}
                         initialLanguage={interviewData?.codeLanguage ?? undefined}
-                        askableQuestions={isInterviewer ? interviewData?.questions ?? [] : undefined}
                         socketAuth={socketAuth}
                         apiFetch={apiFetch}
                         onQuestionUpdate={onQuestionUpdate}
                       />
-                    ) : (
-                      <Whiteboard />
-                    )}
+                    </div>
+                    {activeTab === 'design' && <Whiteboard />}
                   </div>
                   {isInterviewer && aiOpened && (
                     <div className={showAi ? 'w-[24rem] shrink-0 border-l border-white/5' : 'hidden'}>

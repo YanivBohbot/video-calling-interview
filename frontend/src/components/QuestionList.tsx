@@ -4,18 +4,17 @@ import type { Question } from '../lib/questions';
 import { LeetCodeBadge } from './LeetCodeBadge';
 
 // The interview's approved questions, each askable (interviewer only). Asking goes through
-// the editor's live connection, so it needs the Code tab open (`canAsk`).
+// the editor's live connection.
 export const QuestionList: React.FC<{
   questions: Question[];
   currentIndex: number | null;
-  canAsk: boolean;
   onAsk: (index: number) => void;
   onManage: () => void;
-}> = ({ questions, currentIndex, canAsk, onAsk, onManage }) => (
+}> = ({ questions, currentIndex, onAsk, onManage }) => (
   <div className="h-full flex flex-col min-h-0">
     <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-white/5">
       <p className="text-xs text-slate-500">
-        {canAsk ? 'Ask shows a question above the code.' : 'Open the Code Editor tab to ask a question.'}
+        Ask shows a question to the candidate.
       </p>
       {questions.length > 0 && (
         <button onClick={onManage} className="shrink-0 flex items-center gap-1 text-[11px] font-semibold text-brand hover:text-white">
@@ -46,7 +45,6 @@ export const QuestionList: React.FC<{
             </span>
             <button
               onClick={() => onAsk(i)}
-              disabled={!canAsk}
               className="rounded-md bg-brand hover:bg-brand-hover px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-40"
             >
               {currentIndex === i ? 'Asked' : 'Ask'}

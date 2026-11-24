@@ -1,6 +1,6 @@
-import { getCurrentQuestion } from "../roomQuestions.js";
+import { getCurrentQuestion, getAskedQuestions } from "../roomQuestions.js";
 
-export const createJoinRoomHandler = ({ roomState, roomQuestions, findCodeSnapshot, canAccessRoom }) => (socket) => async (roomId) => {
+export const createJoinRoomHandler = ({ roomState, roomQuestions, askedQuestions, findCodeSnapshot, canAccessRoom }) => (socket) => async (roomId) => {
   // Owners may enter their own interviews' rooms, a candidate only the invited one.
   // Socket.io ignores a listener's promise, so a rejection here would be unhandled and
   // could take the whole process down: refuse instead.
@@ -21,6 +21,8 @@ export const createJoinRoomHandler = ({ roomState, roomQuestions, findCodeSnapsh
   // Replay the current question first: the code-snapshot branch below may return early.
   const current = getCurrentQuestion(roomQuestions, roomId);
   if (current) socket.emit("question-update", current);
+  const asked = getAskedQuestions(askedQuestions, roomId);
+  if (asked.length > 0) socket.emit("questions-asked", asked);
 
   // Send the room's current state back to *this* socket only, so a (re)joining
   // client is seeded from the server rather than from a stale page-load snapshot.
