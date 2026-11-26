@@ -34,7 +34,7 @@ export const createInterviewService = ({ interviewRepository, clientUrl }) => {
   const list = (principal) => interviewRepository.findMany({ interviewerId: principal.userId });
 
   const create = async (principal, body = {}) => {
-    const { candidateName, candidateEmail, role, scheduledAt, duration, interviewType, notes } = body;
+    const { candidateName, candidateEmail, role, scheduledAt, duration, interviewType, notes, company, aiInterviewerEnabled, interviewLanguage } = body;
     if (!candidateName || !candidateEmail || !role || !scheduledAt) {
       throw new ValidationError("Missing required interview fields");
     }
@@ -50,6 +50,9 @@ export const createInterviewService = ({ interviewRepository, clientUrl }) => {
       duration: duration || DEFAULT_DURATION_MINUTES,
       interviewType: interviewType || DEFAULT_INTERVIEW_TYPE,
       notes: notes || "",
+      company: company || "",
+      aiInterviewerEnabled: aiInterviewerEnabled ?? false,
+      interviewLanguage: interviewLanguage || "en",
     });
   };
 
@@ -60,9 +63,12 @@ export const createInterviewService = ({ interviewRepository, clientUrl }) => {
   };
 
   // Partial update of the interview report (notes / status / saved questions).
-  const update = async (principal, id, { notes, status, questions } = {}) => {
+  const update = async (principal, id, { notes, status, questions, company, aiInterviewerEnabled, interviewLanguage } = {}) => {
     const data = {};
     if (notes !== undefined) data.notes = notes;
+    if (company != null) data.company = company;
+    if (aiInterviewerEnabled !== undefined) data.aiInterviewerEnabled = aiInterviewerEnabled;
+    if (interviewLanguage !== undefined) data.interviewLanguage = interviewLanguage;
     if (status !== undefined) {
       assertStatus(status);
       data.status = status;

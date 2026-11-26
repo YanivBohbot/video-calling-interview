@@ -15,7 +15,7 @@ export const createPracticeSessionRepository = ({ prisma }) => {
     // fewer than `max` used". An active session started before `staleBefore` is abandoned:
     // it is closed here and its id returned (`closedId`) so the caller writes its report.
     // → { session, closedId } | { conflict: "active" } | { conflict: "limit", closedId }
-    startExclusive: ({ interviewId, language, max, staleBefore }) =>
+    startExclusive: ({ interviewId, language, mode, max, staleBefore }) =>
       prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${interviewId}))`;
         const rows = tx.aiPracticeSession;
@@ -28,7 +28,7 @@ export const createPracticeSessionRepository = ({ prisma }) => {
         }
         const used = await rows.count({ where: { interviewId } });
         if (used >= max) return { conflict: "limit", closedId };
-        return { session: await rows.create({ data: { interviewId, language } }), closedId };
+        return { session: await rows.create({ data: { interviewId, language, mode } }), closedId };
       }),
 
     // Clears a failed report so it can be written again. True only for the call that
@@ -48,6 +48,20 @@ export const createPracticeSessionRepository = ({ prisma }) => {
         data: { messageCount: { increment: 1 }, code, language },
       });
       return count === 1;
+    },
+
+    // One atomic update per avatar token, so parallel requests can't pass the cap either.
+    claimAvatarToken: async (id, { max }) => {
+      const { count } = await sessions.updateMany({
+        where: { id, status: "active", mode: "avatar", avatarTokens: { lt: max } },
+        data: { avatarTokens: { increment: 1 } },
+      });
+      return count === 1;
+    },
+
+    // The question the avatar interviewer last put on screen (index in Interview.questions).
+    savePresentedIndex: async (id, index) => {
+      await sessions.update({ where: { id }, data: { presentedIndex: index }, select: { id: true } });
     },
 
     // True only for the call that actually closed the session (so the report runs once).

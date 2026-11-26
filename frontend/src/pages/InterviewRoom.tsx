@@ -169,6 +169,8 @@ export const InterviewRoom: React.FC = () => {
     codeLanguage?: string | null;
     questions?: Question[] | null;
     interviewerId?: { clerkID?: string } | null;
+    company?: string | null;
+    interviewLanguage?: 'en' | 'he' | null;
   } | null>(null);
 
   // The backend only returns this interview to its owner, so once it has loaded the
@@ -317,6 +319,14 @@ export const InterviewRoom: React.FC = () => {
                     Live
                   </span>
                   <h1 className="text-xs font-medium text-slate-400">ID: {id}</h1>
+                  {interviewData?.company && (
+                    <span className="text-xs font-medium text-slate-300">{interviewData.company}</span>
+                  )}
+                  {interviewData?.interviewLanguage && (
+                    <span className="text-xs text-slate-400">
+                      {interviewData.interviewLanguage === 'he' ? 'עברית' : 'English'}
+                    </span>
+                  )}
                 </div>
               </div>
 

@@ -14,11 +14,12 @@ import '@stream-io/video-react-sdk/dist/css/styles.css';
 import CollaborativeEditor from '../components/CollaborativeEditor';
 import Whiteboard from '../components/Whiteboard';
 import { AiInterviewerPanel } from '../components/ai/AiInterviewerPanel';
+import { AvatarInterviewer, AvatarStartCard } from '../components/ai/AvatarInterviewer';
 import { QuestionBanner } from '../components/QuestionBanner';
 import { AskedQuestionList } from '../components/AskedQuestionList';
 import { tabForQuestion, hasUnseenQuestions } from '../lib/roomQuestions';
 import type { AskedQuestion } from '../lib/questions';
-import { useAiAutoOpen } from '../lib/useAiAutoOpen';
+import { useAvatarInterviewer } from '../lib/useAvatarInterviewer';
 import { useApi } from '../lib/api';
 import { readInvite, storeInvite } from '../lib/storage';
 
@@ -30,6 +31,11 @@ type CandidateRoomData = {
   role: string;
   codeSnapshot?: string | null;
   codeLanguage?: string | null;
+  company?: string;
+  interviewLanguage?: 'en' | 'he';
+  // The interviewer allowed the AI interviewer (avatar) to run the interview in their absence.
+  aiInterviewerEnabled?: boolean;
+  questionCount?: number;
 };
 
 // The secret arrives in the URL fragment (#invite=…), which browsers never send to a
@@ -56,8 +62,10 @@ const FullScreenMessage: React.FC<{ icon: React.ReactNode; title: string; text: 
   </div>
 );
 
-// The invited candidate's view of an interview: video, code editor and whiteboard.
-// No question list, no AI, no report — the backend never sends them to a candidate.
+// The invited candidate's view of an interview: video, code editor, whiteboard and the AI
+// interviewer (a text chat, or — when the interview allows it and the interviewer is absent —
+// a talking avatar that runs the interview in place of the video call). No question list, no
+// report: the backend never sends them to a candidate.
 export const CandidateRoom: React.FC = () => {
   const { id = '' } = useParams();
   const [invite] = React.useState(() => takeInviteFromUrl(id));
@@ -92,12 +100,39 @@ export const CandidateRoom: React.FC = () => {
     setQuestionMenu((open) => !open);
     setSeenCount(asked.length);
   };
-  // A session already exists (the room was reloaded): show it without a click.
-  const openAi = React.useCallback(() => {
+  // Whether the interviewer is in the room: unknown (null) until the editor's socket joins.
+  const [interviewerPresent, setInterviewerPresent] = React.useState<boolean | null>(null);
+  // The avatar replaces the video call: the candidate leaves the call when it starts.
+  const callRef = React.useRef<Call | null>(null);
+  const [leftCall, setLeftCall] = React.useState(false);
+  const leaveCall = React.useCallback(() => {
+    setLeftCall(true);
+    callRef.current?.leave().catch(() => {});
+  }, []);
+  const avatar = useAvatarInterviewer({
+    apiFetch,
+    interviewId: id,
+    enabled: status === 'ready',
+    getCode,
+    onQuestion: onQuestionUpdate,
+    onAvatarStart: leaveCall,
+  });
+  const avatarAllowed =
+    !!room?.aiInterviewerEnabled && (room.questionCount ?? 0) > 0 && interviewerPresent === false && avatar.status === 'none';
+  const avatarView =
+    avatar.status === 'connecting' || avatar.status === 'live' || avatar.status === 'dropped' || (avatar.status === 'finished' && leftCall);
+  // The interview's session is an avatar one: the text panel stays out of it.
+  const avatarSession = avatar.status !== 'loading' && avatar.status !== 'none' && avatar.status !== 'text';
+  // A text session already exists (the room was reloaded): show it without a click.
+  React.useEffect(() => {
+    if (avatar.status !== 'text') return;
     setAiOpened(true);
     setShowAi(true);
-  }, []);
-  useAiAutoOpen(apiFetch, id, status === 'ready', openAi);
+  }, [avatar.status]);
+  const startAvatar = () => {
+    setShowAi(false);
+    void avatar.start();
+  };
 
   React.useEffect(() => {
     if (!invite) return;
@@ -127,6 +162,7 @@ export const CandidateRoom: React.FC = () => {
       await joined.join({ create: true });
       if (cancelled) return;
       setClient(videoClient);
+      callRef.current = joined;
       setCall(joined);
       setStatus('ready');
     };
@@ -144,6 +180,7 @@ export const CandidateRoom: React.FC = () => {
   }, [id, invite, apiFetch]);
 
   const leave = async () => {
+    avatar.stop();
     await call?.leave().catch(() => {});
     await client?.disconnectUser().catch(() => {});
     setCall(null);
@@ -246,23 +283,27 @@ export const CandidateRoom: React.FC = () => {
                     <PenTool size={16} />
                     System Design
                   </button>
-                  <button
-                    onClick={() => {
-                      setShowAi((open) => !open);
-                      setAiOpened(true);
-                    }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      showAi
-                        ? 'bg-violet-500/20 text-violet-200'
-                        : !aiOpened
-                          ? 'bg-brand/20 text-violet-100 ring-2 ring-brand animate-pulse'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                    }`}
-                    title={showAi ? 'Hide the AI interviewer' : 'Show the AI interviewer'}
-                  >
-                    <Bot size={16} />
-                    AI interviewer
-                  </button>
+                  {!avatarSession && (
+                    <button
+                      onClick={() => {
+                        // The interview allows the avatar and the interviewer is away: run it.
+                        if (avatarAllowed) return startAvatar();
+                        setShowAi((open) => !open);
+                        setAiOpened(true);
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        showAi
+                          ? 'bg-violet-500/20 text-violet-200'
+                          : !aiOpened
+                            ? 'bg-brand/20 text-violet-100 ring-2 ring-brand animate-pulse'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                      }`}
+                      title={showAi ? 'Hide the AI interviewer' : 'Show the AI interviewer'}
+                    >
+                      <Bot size={16} />
+                      AI interviewer
+                    </button>
+                  )}
                 </div>
                 <QuestionBanner current={current} />
                 {/* The editor stays mounted on every tab: it holds the live connection. */}
@@ -278,27 +319,41 @@ export const CandidateRoom: React.FC = () => {
                         onCodeChange={onCodeChange}
                         onQuestionUpdate={onQuestionUpdate}
                         onQuestionsAsked={setAsked}
+                        onInterviewerPresence={setInterviewerPresent}
                       />
                     </div>
                     {activeTab === 'design' && <Whiteboard />}
                   </div>
-                  {aiOpened && (
+                  {aiOpened && !avatarSession && (
                     <div className={showAi ? 'w-[24rem] shrink-0 border-l border-white/5' : 'hidden'}>
-                      <AiInterviewerPanel apiFetch={apiFetch} interviewId={id} role="candidate" getCode={getCode} />
+                      <AiInterviewerPanel
+                        apiFetch={apiFetch}
+                        interviewId={id}
+                        role="candidate"
+                        getCode={getCode}
+                        onTextSession={avatar.textSessionStarted}
+                      />
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="w-1/3 h-full flex flex-col p-2 overflow-hidden">
-                <div className="flex-1 bg-slate-900 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex flex-col">
-                  <div className="flex-1 min-h-0">
-                    <SpeakerLayout />
-                  </div>
-                  <div className="h-20 bg-slate-800/80 backdrop-blur-md border-t border-white/10 flex items-center justify-center">
-                    <CallControls onLeave={leave} />
-                  </div>
-                </div>
+              <div className="w-1/3 h-full flex flex-col gap-2 p-2 overflow-hidden">
+                {avatarView ? (
+                  <AvatarInterviewer avatar={avatar} />
+                ) : (
+                  <>
+                    {avatarAllowed && <AvatarStartCard onStart={startAvatar} error={avatar.error} />}
+                    <div className="flex-1 bg-slate-900 rounded-2xl overflow-hidden border border-white/5 shadow-inner flex flex-col">
+                      <div className="flex-1 min-h-0">
+                        <SpeakerLayout />
+                      </div>
+                      <div className="h-20 bg-slate-800/80 backdrop-blur-md border-t border-white/10 flex items-center justify-center">
+                        <CallControls onLeave={leave} />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

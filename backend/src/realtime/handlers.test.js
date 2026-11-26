@@ -34,6 +34,7 @@ beforeEach(() => {
     },
     roomState: new Map(),
     roomQuestions: new Map(),
+    roomOwners: new Map(),
     askedQuestions: new Map(),
     interviewStore: { update: vi.fn().mockResolvedValue({}) },
     findCodeSnapshot: vi.fn(),
@@ -54,6 +55,7 @@ describe("join-room", () => {
     expect(socket.rooms.has("r1")).toBe(true);
     expect(socket.data.roomId).toBe("r1");
     expect(events).toEqual([
+      ["room:r1", "interviewer-presence", { present: true }],
       ["self", "question-update", QUESTION],
       ["self", "questions-asked", [QUESTION]],
       ["self", "code-update", "live()"],
@@ -67,6 +69,7 @@ describe("join-room", () => {
     await createJoinRoomHandler(ctx)(fakeSocket())("r1");
     expect(ctx.findCodeSnapshot).toHaveBeenCalledWith("r1");
     expect(events).toEqual([
+      ["room:r1", "interviewer-presence", { present: true }],
       ["self", "code-update", "saved()"],
       ["self", "language-update", "javascript"],
     ]);
@@ -75,14 +78,14 @@ describe("join-room", () => {
   it("emits nothing for an unknown room", async () => {
     ctx.findCodeSnapshot.mockResolvedValue(null);
     await createJoinRoomHandler(ctx)(fakeSocket())("default");
-    expect(events).toEqual([]);
+    expect(events).toEqual([["room:default", "interviewer-presence", { present: true }]]);
   });
 
   it("survives a database error while loading the snapshot", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     ctx.findCodeSnapshot.mockRejectedValue(new Error("db down"));
     await expect(createJoinRoomHandler(ctx)(fakeSocket())("r1")).resolves.toBeUndefined();
-    expect(events).toEqual([]);
+    expect(events).toEqual([["room:r1", "interviewer-presence", { present: true }]]);
   });
 });
 
@@ -179,6 +182,90 @@ describe("disconnect", () => {
     createDisconnectHandler(ctx)(socket)();
     expect(ctx.roomQuestions.has("r1")).toBe(true);
     expect(ctx.interviewStore.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("interviewer presence", () => {
+  const candidate = { kind: "candidate", interviewId: "r1" };
+  const presence = () => events.filter(([, name]) => name === "interviewer-presence");
+
+  beforeEach(() => ctx.findCodeSnapshot.mockResolvedValue(null));
+
+  it("tells the room when the first owner joins", async () => {
+    await createJoinRoomHandler(ctx)(fakeSocket("s1"))("r1");
+    expect(presence()).toEqual([["room:r1", "interviewer-presence", { present: true }]]);
+  });
+
+  it("tells a candidate who joins whether the interviewer is there, and only that candidate", async () => {
+    await createJoinRoomHandler(ctx)(fakeSocket("s9", candidate))("r1");
+    expect(presence()).toEqual([["self", "interviewer-presence", { present: false }]]);
+    events = [];
+    await createJoinRoomHandler(ctx)(fakeSocket("s1"))("r1");
+    events = [];
+    await createJoinRoomHandler(ctx)(fakeSocket("s8", candidate))("r1");
+    expect(presence()).toEqual([["self", "interviewer-presence", { present: true }]]);
+  });
+
+  it("does not re-announce when a second owner socket joins", async () => {
+    await createJoinRoomHandler(ctx)(fakeSocket("s1"))("r1");
+    events = [];
+    await createJoinRoomHandler(ctx)(fakeSocket("s2"))("r1");
+    expect(presence()).toEqual([["self", "interviewer-presence", { present: true }]]);
+  });
+
+  it("counts a socket once when it joins twice", async () => {
+    const socket = fakeSocket("s1");
+    await createJoinRoomHandler(ctx)(socket)("r1");
+    await createJoinRoomHandler(ctx)(socket)("r1");
+    createDisconnectHandler(ctx)(socket)();
+    expect(ctx.roomOwners.has("r1")).toBe(false);
+  });
+
+  it("stays silent while another owner socket remains, then says absent when the last leaves", async () => {
+    const a = fakeSocket("s1");
+    const b = fakeSocket("s2");
+    await createJoinRoomHandler(ctx)(a)("r1");
+    await createJoinRoomHandler(ctx)(b)("r1");
+    events = [];
+    createDisconnectHandler(ctx)(a)();
+    expect(presence()).toEqual([]);
+    createDisconnectHandler(ctx)(b)();
+    expect(presence()).toEqual([["room:r1", "interviewer-presence", { present: false }]]);
+  });
+
+  it("ignores a socket that disconnected while its access check was pending", async () => {
+    const socket = fakeSocket("s1");
+    ctx.canAccessRoom.mockImplementation(async () => {
+      socket.disconnected = true;
+      createDisconnectHandler(ctx)(socket)();
+      return true;
+    });
+    await createJoinRoomHandler(ctx)(socket)("r1");
+    expect(ctx.roomOwners.has("r1")).toBe(false);
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(presence()).toEqual([]);
+  });
+
+  it("moves an owner socket's count when it joins another room, and leaves the right room on disconnect", async () => {
+    const socket = fakeSocket("s1");
+    await createJoinRoomHandler(ctx)(socket)("r1");
+    events = [];
+    await createJoinRoomHandler(ctx)(socket)("r2");
+    expect(presence()).toEqual([
+      ["room:r1", "interviewer-presence", { present: false }],
+      ["room:r2", "interviewer-presence", { present: true }],
+    ]);
+    createDisconnectHandler(ctx)(socket)();
+    expect(ctx.roomOwners.size).toBe(0);
+  });
+
+  it("a candidate leaving does not change presence", async () => {
+    await createJoinRoomHandler(ctx)(fakeSocket("s1"))("r1");
+    const c = fakeSocket("s9", candidate);
+    await createJoinRoomHandler(ctx)(c)("r1");
+    events = [];
+    createDisconnectHandler(ctx)(c)();
+    expect(presence()).toEqual([]);
   });
 });
 

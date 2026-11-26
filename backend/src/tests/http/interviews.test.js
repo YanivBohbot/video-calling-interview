@@ -63,7 +63,24 @@ describe("interviewService", () => {
       duration: 60,
       interviewType: "technical",
       notes: "",
+      company: "",
+      aiInterviewerEnabled: false,
+      interviewLanguage: "en",
     });
+  });
+
+  it("create forwards company, aiInterviewerEnabled and interviewLanguage", async () => {
+    const repo = fakeRepo();
+    await service(repo).create(OWNER, { ...VALID_BODY, company: "Acme", aiInterviewerEnabled: true, interviewLanguage: "he" });
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ company: "Acme", aiInterviewerEnabled: true, interviewLanguage: "he" }),
+    );
+  });
+
+  it("update forwards company, aiInterviewerEnabled and interviewLanguage", async () => {
+    const repo = fakeRepo({ update: vi.fn().mockResolvedValue({ id: "iv1" }) });
+    await service(repo).update(OWNER, "iv1", { company: "Acme", aiInterviewerEnabled: false, interviewLanguage: "he" });
+    expect(repo.update).toHaveBeenCalledWith("iv1", { company: "Acme", aiInterviewerEnabled: false, interviewLanguage: "he" });
   });
 
   it("create rejects an unparseable scheduledAt with a 400", async () => {
@@ -173,6 +190,31 @@ describe("interviews HTTP contract", () => {
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ _id: "iv1", interviewerId: NESTED });
     expect(prisma.interview.create).toHaveBeenCalledWith(expect.objectContaining({ include: WITH_INTERVIEWER }));
+  });
+
+  it("POST rejects an unknown interviewLanguage and a non-boolean aiInterviewerEnabled", async () => {
+    const lang = await request(app).post("/api/interviews").send({ ...VALID_BODY, interviewLanguage: "fr" });
+    expect(lang.status).toBe(400);
+    expect(lang.body).toEqual({ message: "Invalid interviewLanguage" });
+    const flag = await request(app).post("/api/interviews").send({ ...VALID_BODY, aiInterviewerEnabled: "yes" });
+    expect(flag.status).toBe(400);
+    expect(flag.body).toEqual({ message: "Invalid aiInterviewerEnabled" });
+    expect(prisma.interview.create).not.toHaveBeenCalled();
+  });
+
+  it("POST stores the three new fields over HTTP", async () => {
+    prisma.interview.create.mockResolvedValue({ id: "iv1", interviewerId: "u-ada", interviewer: INTERVIEWER });
+    await request(app).post("/api/interviews").send({ ...VALID_BODY, company: "Acme", aiInterviewerEnabled: true, interviewLanguage: "he" });
+    expect(prisma.interview.create.mock.calls[0][0].data).toMatchObject({
+      company: "Acme", aiInterviewerEnabled: true, interviewLanguage: "he",
+    });
+  });
+
+  it("PATCH /:id accepts the three new fields", async () => {
+    prisma.interview.update.mockResolvedValue({ id: "iv1", interviewerId: "u-ada", interviewer: INTERVIEWER });
+    const res = await request(app).patch("/api/interviews/iv1").send({ company: "Acme", aiInterviewerEnabled: true, interviewLanguage: "he" });
+    expect(res.status).toBe(200);
+    expect(prisma.interview.update.mock.calls[0][0].data).toEqual({ company: "Acme", aiInterviewerEnabled: true, interviewLanguage: "he" });
   });
 
   it("PATCH /:id/status returns interviewerId as a plain string (no include)", async () => {

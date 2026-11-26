@@ -3,7 +3,7 @@ import { pollStep, MAX_REPORT_POLLS, type PollState } from './aiPolling';
 import type { AiSession } from './aiInterviewer';
 
 const session = (extra: Partial<AiSession> = {}): AiSession => ({
-  id: 's1', status: 'active', language: 'python', code: null, startedAt: '', finishedAt: null,
+  id: 's1', mode: 'text', status: 'active', language: 'python', code: null, startedAt: '', finishedAt: null,
   messages: [], reportStatus: 'none', report: null, ...extra,
 });
 const fresh: PollState = { sessionId: null, polls: 0, waitOver: false };

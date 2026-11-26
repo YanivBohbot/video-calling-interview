@@ -33,11 +33,13 @@ import { createQuestionRouter } from "./routes/question.routes.js";
 import { createStreamRouter } from "./routes/stream.routes.js";
 import { createCodeRouter } from "./routes/code.routes.js";
 import { createPistonClient } from "./integrations/piston/client.js";
+import { createLiveAvatarClient } from "./integrations/liveavatar/client.js";
 import { createLeetCodeClient } from "./integrations/leetcode/client.js";
 import { createAuthRouter } from "./routes/auth.routes.js";
 import { createPracticeService } from "./services/practice.service.js";
 import { createPracticeController } from "./controllers/practice.controller.js";
 import { createPracticeRouter } from "./routes/practice.routes.js";
+import { isOwnerPresent } from "./realtime/roomOwners.js";
 import { EDITOR_LANGUAGES } from "./integrations/piston/client.js";
 import { createPracticeInterviewer } from "./ai/agents/interviewer/index.js";
 import { createPracticeCoach } from "./ai/agents/coach/index.js";
@@ -60,6 +62,7 @@ const PRACTICE_MESSAGES_PER_MINUTE = 10;
 // (AI pipeline, Clerk, Stream client, code runner, clock) while keeping everything else real.
 // `leetcode` replaces the LeetCode GraphQL client (tests).
 // `practiceInterviewer` / `practiceCoach` replace the two practice agents (tests).
+// `liveAvatar` replaces the LiveAvatar token client (tests; null = avatar unavailable).
 // `identityResolver` replaces the whole credential check — HTTP tests use it to act as a
 // given principal without minting real tokens (the real resolver has its own tests).
 export const createContainer = ({
@@ -73,6 +76,7 @@ export const createContainer = ({
   leetcode,
   practiceInterviewer,
   practiceCoach,
+  liveAvatar,
   now,
 }) => {
   // ── Repositories ──────────────────────────────────────────────────────────
@@ -85,6 +89,8 @@ export const createContainer = ({
 
   // ── External clients ──────────────────────────────────────────────────────
   const runner = codeRunner ?? createPistonClient({ baseUrl: config.pistonUrl });
+  // null when LIVEAVATAR_API_KEY is unset: avatar mode is then unavailable.
+  const avatarClient = liveAvatar !== undefined ? liveAvatar : createLiveAvatarClient({ ...config.liveAvatar });
   let leetcodeClient;
   const getLeetCode = () => (leetcodeClient ??= leetcode ?? createLeetCodeClient());
 
@@ -197,6 +203,8 @@ export const createContainer = ({
   // The question each room's interviewer put on screen (Ask). Shared with the realtime
   // channel (server.js), which writes it; the AI interviewer reads it.
   const roomQuestions = new Map();
+  // Owner sockets per room: whether the interviewer is there (the candidate may then not need the avatar).
+  const roomOwners = new Map();
   services.practice = createPracticeService({
     practiceSessionRepository: repositories.practiceSession,
     interviewRepository: repositories.interview,
@@ -207,6 +215,8 @@ export const createContainer = ({
     coach: { review: (args) => getPracticeAgents().coach.review(args) },
     messageLimiter: createRateLimiter({ max: PRACTICE_MESSAGES_PER_MINUTE, windowMs: ONE_MINUTE_MS }),
     askedQuestionOf: (interviewId) => roomQuestions.get(interviewId),
+    isInterviewerPresent: (interviewId) => isOwnerPresent(roomOwners, interviewId),
+    liveAvatar: avatarClient,
     now,
   });
 
@@ -234,5 +244,5 @@ export const createContainer = ({
     practice: createPracticeRouter({ practiceController: controllers.practice }),
   };
 
-  return { config, prisma, auth, ai, repositories, services, controllers, routers, realtime: { roomQuestions } };
+  return { config, prisma, auth, ai, repositories, services, controllers, routers, realtime: { roomQuestions, roomOwners } };
 };

@@ -69,7 +69,13 @@ const row = (id, interviewerId, extra = {}) => ({
   notes: "secret notes",
   codeLanguage: "javascript",
   codeSnapshot: "x()",
-  questions: [{ text: "Q1", category: "technical", difficulty: "easy" }],
+  questions: [
+    { text: "Q1", category: "technical", difficulty: "easy" },
+    { text: "Q2", category: "technical", difficulty: "easy" },
+  ],
+  company: "Acme",
+  aiInterviewerEnabled: false,
+  interviewLanguage: "en",
   inviteTokenHash: null,
   ...extra,
 });
@@ -161,8 +167,13 @@ describe("candidates", () => {
       status: "scheduled",
       codeLanguage: "javascript",
       codeSnapshot: "x()",
+      company: "Acme",
+      interviewLanguage: "en",
+      aiInterviewerEnabled: false,
+      questionCount: 2,
       viewer: "candidate",
     });
+    expect(res.body).not.toHaveProperty("questions");
     expect(JSON.stringify(res.body)).not.toMatch(/Q1|secret notes|ada@x.dev/);
   });
 
@@ -172,7 +183,7 @@ describe("candidates", () => {
 
   it("gives the owner the full view on /room, and strangers a 404", async () => {
     const owner = await as(ada).get("/api/interviews/iv-a/room");
-    expect(owner.body.questions).toHaveLength(1);
+    expect(owner.body.questions).toHaveLength(2);
     expect((await as(bob).get("/api/interviews/iv-a/room")).status).toBe(404);
   });
 });

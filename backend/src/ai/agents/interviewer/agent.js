@@ -5,9 +5,16 @@ import {
   createFindProblemTool,
   createReadCandidateCodeTool,
   createEndSessionTool,
+  createPresentQuestionTool,
 } from "../../tools/index.js";
-import { turnLimits, isLimitMessage, withFallback, createLoggingMiddleware } from "../../middleware/index.js";
-import { buildInterviewerPrompt, buildQuestionSwitchNote } from "../../prompts/index.js";
+import {
+  turnLimits,
+  isLimitMessage,
+  withFallback,
+  createLoggingMiddleware,
+  forceToolFirst,
+} from "../../middleware/index.js";
+import { buildInterviewerPrompt, buildAvatarInterviewerPrompt, buildQuestionSwitchNote } from "../../prompts/index.js";
 import { threadOf, textOf } from "./messages.js";
 import { repairUnansweredToolCalls } from "./repair.js";
 import { toTurnEvents } from "./events.js";
@@ -28,7 +35,17 @@ const contextSchema = z.object({
   language: z.string(),
   // The interview's question, or null: the agent then finds its own problem.
   question: z.object({ text: z.string(), category: z.string(), difficulty: z.string() }).nullable(),
+  // "avatar": the agent runs the whole spoken interview, walking `questions` with present_question.
+  mode: z.enum(["text", "avatar"]).default("text"),
+  company: z.string().default(""),
+  interviewLanguage: z.string().default("en"),
+  questions: z
+    .array(z.object({ text: z.string().nullish(), category: z.string().nullish(), difficulty: z.string().nullish() }))
+    .default([]),
 });
+
+const promptFor = (context) =>
+  context.mode === "avatar" ? buildAvatarInterviewerPrompt(context) : buildInterviewerPrompt(context);
 
 // The practice interviewer: a ReAct agent (createAgent) that talks with the candidate,
 // reads and runs their code, and decides when the session is over.
@@ -49,11 +66,17 @@ export const createPracticeInterviewer = ({
       createReadCandidateCodeTool(),
       createRunCodeTool({ runCode, languages }),
       createEndSessionTool(),
+      createPresentQuestionTool(),
     ],
     contextSchema,
     checkpointer,
     middleware: [
-      dynamicSystemPromptMiddleware((_state, runtime) => buildInterviewerPrompt(runtime.context)),
+      dynamicSystemPromptMiddleware((_state, runtime) => promptFor(runtime.context)),
+      // Avatar mode: question 0 goes on screen by a real present_question call, never in words.
+      forceToolFirst({
+        tool: "present_question",
+        when: ({ runtime }) => runtime?.context?.mode === "avatar" && (runtime.context.questions?.length ?? 0) > 0,
+      }),
       ...turnLimits({ modelCalls: MODEL_CALLS_PER_TURN, toolCalls: TOOL_CALLS_PER_TURN }),
       ...withFallback(fallbackModel),
       createLoggingMiddleware({ agent: "practiceInterviewer", log }),
@@ -62,16 +85,33 @@ export const createPracticeInterviewer = ({
 
   // One candidate message → token / tool / done events (see events.js).
   // Aborting `signal` (candidate disconnected) stops the loop; the iteration then throws.
-  // `questionChanged`: the human interviewer switched question since the last turn.
-  async function* streamTurn({ sessionId, text, code, language, role, interviewType, question = null, questionChanged = false, signal }) {
+  // `questionChanged`: the human interviewer switched question since the last turn (text mode
+  // only: in avatar mode the agent walks `questions` itself).
+  async function* streamTurn({
+    sessionId,
+    text,
+    code,
+    language,
+    role,
+    interviewType,
+    question = null,
+    questionChanged = false,
+    mode = "text",
+    company = "",
+    interviewLanguage = "en",
+    questions = [],
+    signal,
+  }) {
     await repairUnansweredToolCalls(agent, sessionId);
     const messages = [{ role: "user", content: text }];
-    if (question && questionChanged) messages.unshift({ role: "system", content: buildQuestionSwitchNote(question) });
+    if (mode !== "avatar" && question && questionChanged) {
+      messages.unshift({ role: "system", content: buildQuestionSwitchNote(question) });
+    }
     const stream = await agent.stream(
       { messages },
       {
         ...threadOf(sessionId),
-        context: { sessionId, role, interviewType, code, language, question },
+        context: { sessionId, role, interviewType, code, language, question, mode, company, interviewLanguage, questions },
         recursionLimit: RECURSION_LIMIT,
         streamMode: ["messages", "updates"],
         signal,

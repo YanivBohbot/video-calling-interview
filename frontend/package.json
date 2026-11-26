@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@clerk/react": "^6.19.2",
+    "@heygen/liveavatar-web-sdk": "0.0.20",
     "@monaco-editor/react": "^4.7.0",
     "@stream-io/video-react-sdk": "^1.32.4",
     "@tailwindcss/vite": "^4.2.1",

@@ -94,10 +94,41 @@ describe("practice coach agent", () => {
   });
 
   it("does not accept a report written before any code ran", async () => {
-    const model = fakeModel().respondWithTools([{ name: REPORT_TOOL, args: report([]) }]).respond(new AIMessage("Done."));
+    const model = fakeModel()
+      .respondWithTools([{ name: REPORT_TOOL, args: report([test("run-1", "[0,1]")]) }])
+      .respond(new AIMessage("Done."))
+      .respond(new AIMessage("Still no."));
     await expect(createPracticeCoach({ model, runCode: vi.fn(), languages: LANGUAGES }).review(SESSION)).rejects.toBeInstanceOf(
       CoachFailedError,
     );
+  });
+
+  // E.g. a SQL question with the editor's starter code left in it: nothing worth running.
+  it("still reports, with no tests, when the model concludes without running the code", async () => {
+    const model = fakeModel()
+      .respond(new AIMessage("The editor only holds a starter template, there is nothing to run."))
+      .respondWithTools([{ name: REPORT_TOOL, args: report([test("run-1", "[0,1]")]) }]);
+    const runCode = vi.fn();
+    const result = await createPracticeCoach({ model, runCode, languages: LANGUAGES }).review(SESSION);
+    expect(result.summary).toBe("Good start.");
+    expect(result.testsRun).toEqual([]);
+    expect(runCode).not.toHaveBeenCalled();
+  });
+
+  it("reports on a behavioral-only session (no code) without running anything", async () => {
+    const model = fakeModel().respondWithTools([{ name: REPORT_TOOL, args: report([]) }]);
+    const runCode = vi.fn();
+    const result = await createPracticeCoach({ model, runCode, languages: LANGUAGES }).review({
+      transcript: [
+        { role: "interviewer", text: "Tell me about a conflict in your team." },
+        { role: "candidate", text: "Situation: two devs disagreed on the API design..." },
+      ],
+      code: "",
+      language: "javascript",
+    });
+    expect(result.testsRun).toEqual([]);
+    expect(result.summary).toBe("Good start.");
+    expect(runCode).not.toHaveBeenCalled();
   });
 
   it("sends the transcript and the final code to the model", async () => {

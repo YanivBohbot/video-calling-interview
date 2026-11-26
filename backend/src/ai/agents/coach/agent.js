@@ -37,31 +37,35 @@ export const createPracticeCoach = ({ model, fallbackModel, runCode, languages, 
       // A run of the model's own solution says nothing about the candidate's code.
       if (candidateCode && ran.includes(candidateCode)) runs.set(runId, output);
     };
-    const agent = createAgent({
-      model,
-      tools: [
-        createRunCodeTool({ runCode, languages, onRun: recordRun }),
-        createReadCandidateCodeTool(),
-      ],
-      systemPrompt: COACH_PROMPT,
-      responseFormat: reportFormat,
-      contextSchema,
-      middleware: [
-        // Not turnLimits(): its after_model hooks break the structured-answer retry (see budget.js).
-        createCallBudget({ modelCalls: MODEL_CALLS, toolCalls: TOOL_CALLS }),
-        // No report before at least one real run of the candidate's code.
-        requireToolBeforeResponse({ tool: "run_code" }),
-        ...withFallback(fallbackModel),
-        createLoggingMiddleware({ agent: "practiceCoach", log }),
-      ],
-    });
-
-    let result;
-    try {
-      result = await agent.invoke(
+    const invoke = (requireRun) =>
+      createAgent({
+        model,
+        tools: [
+          createRunCodeTool({ runCode, languages, onRun: recordRun }),
+          createReadCandidateCodeTool(),
+        ],
+        systemPrompt: COACH_PROMPT,
+        responseFormat: reportFormat,
+        contextSchema,
+        middleware: [
+          // Not turnLimits(): its after_model hooks break the structured-answer retry (see budget.js).
+          createCallBudget({ modelCalls: MODEL_CALLS, toolCalls: TOOL_CALLS }),
+          // No report before at least one real run of the candidate's code.
+          ...(requireRun ? [requireToolBeforeResponse({ tool: "run_code" })] : []),
+          ...withFallback(fallbackModel),
+          createLoggingMiddleware({ agent: "practiceCoach", log }),
+        ],
+      }).invoke(
         { messages: [{ role: "user", content: buildCoachInput({ transcript, code, language }) }] },
         { context: { code: code ?? "", language }, recursionLimit: RECURSION_LIMIT },
       );
+
+    let result;
+    try {
+      result = await invoke(Boolean(candidateCode));
+      // The model concluded without running the code (e.g. a SQL question over the editor's
+      // starter code): one more pass may report without it. Its tests are dropped below anyway.
+      if (!result?.structuredResponse && candidateCode && runs.size === 0) result = await invoke(false);
     } catch (err) {
       throw new CoachFailedError("The coach failed", { cause: err });
     }

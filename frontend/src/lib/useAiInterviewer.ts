@@ -127,7 +127,7 @@ export function useAiInterviewer({ apiFetch, interviewId, role }: { apiFetch: Ap
       if (role !== 'candidate') return;
       setError(null);
       try {
-        const id = await api.start(language);
+        const id = await api.start(language, 'text');
         pollRef.current = { sessionId: id, polls: 0, waitOver: false };
         setReportWaitOver(false);
         show(await api.get(id));

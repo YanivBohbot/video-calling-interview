@@ -20,6 +20,8 @@ interface CodeEditorProps {
   // shows them (banner, Questions menu) and switches to the tab a question needs.
   onQuestionUpdate?: (question: AskedQuestion) => void;
   onQuestionsAsked?: (asked: AskedQuestion[]) => void;
+  // Whether the interviewer (the room's owner) is connected: on join, then on every change.
+  onInterviewerPresence?: (present: boolean) => void;
   // Interviewer only: `ask(index, question)` shows a question to everyone (the server strips
   // anything but index, text, category and difficulty, so never the LeetCode source).
   ref?: React.Ref<EditorHandle>;
@@ -29,7 +31,7 @@ interface CodeEditorProps {
 
 export type EditorHandle = { ask: (index: number, question: Question) => void };
 
-const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, socketAuth, apiFetch, onQuestionUpdate, onQuestionsAsked, onCodeChange, ref }) => {
+const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, initialLanguage, socketAuth, apiFetch, onQuestionUpdate, onQuestionsAsked, onInterviewerPresence, onCodeChange, ref }) => {
   const [code, setCode] = useState<string>(
     initialCode ?? '// Welcome to the Interview Code Editor\n\nfunction solution() {\n  console.log("Hello, TalentIQ!");\n}\n\nsolution();',
   );
@@ -44,6 +46,8 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
   onQuestionUpdateRef.current = onQuestionUpdate;
   const onQuestionsAskedRef = useRef(onQuestionsAsked);
   onQuestionsAskedRef.current = onQuestionsAsked;
+  const onInterviewerPresenceRef = useRef(onInterviewerPresence);
+  onInterviewerPresenceRef.current = onInterviewerPresence;
 
   useEffect(() => {
     const socket = io(API_URL, { auth: socketAuth });
@@ -64,6 +68,9 @@ const CollaborativeEditor: React.FC<CodeEditorProps> = ({ roomId, initialCode, i
     });
     socketRef.current.on('question-update', (q: AskedQuestion) => onQuestionUpdateRef.current?.(q));
     socketRef.current.on('questions-asked', (asked: AskedQuestion[]) => onQuestionsAskedRef.current?.(asked));
+    socketRef.current.on('interviewer-presence', (data: { present?: boolean }) =>
+      onInterviewerPresenceRef.current?.(data?.present === true),
+    );
 
     return () => {
       socketRef.current?.disconnect();

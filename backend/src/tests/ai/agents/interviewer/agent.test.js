@@ -151,4 +151,65 @@ describe("practice interviewer agent", () => {
     expect(model.callCount).toBe(callsAtAbort);
     expect(callsAtAbort).toBeLessThan(6);
   });
+
+  describe("avatar mode", () => {
+    const QUESTIONS = [
+      { text: "Tell me about a hard bug you fixed", category: "behavioral", difficulty: "easy" },
+      { text: "Reverse a linked list", category: "technical", difficulty: "medium" },
+    ];
+    const AVATAR = { ...TURN, mode: "avatar", company: "Acme", interviewLanguage: "en", questions: QUESTIONS };
+
+    it("yields a question event when the agent presents a question, before done", async () => {
+      let systemPrompt;
+      const model = fakeModel()
+        .respond((messages) => {
+          systemPrompt = messages[0].content;
+          return toolCalls([{ name: "present_question", args: { index: 1 } }]);
+        })
+        .respond(new AIMessage("Next question: reverse a linked list. The editor is open."));
+      const { interviewer } = build(model);
+      const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "Done with that one.", ...AVATAR }));
+      const question = events.findIndex((e) => e.type === "question");
+      expect(events[question]).toEqual({ type: "question", index: 1 });
+      expect(question).toBeLessThan(events.findIndex((e) => e.type === "done"));
+      expect(events).toContainEqual({ type: "tool", name: "present_question", endsSession: false });
+      expect(systemPrompt).toContain("present_question");
+      expect(systemPrompt).toContain("Acme");
+    });
+
+    it("yields no question event for an index out of range", async () => {
+      const model = fakeModel()
+        .respond(toolCalls([{ name: "present_question", args: { index: 5 } }]))
+        .respond(new AIMessage("That was the last question."));
+      const { interviewer } = build(model);
+      const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "Next?", ...AVATAR }));
+      expect(events.filter((e) => e.type === "question")).toEqual([]);
+    });
+
+    it("does not use the question-switch note", async () => {
+      let seen;
+      const model = fakeModel().respond((messages) => {
+        seen = messages.map((m) => m.type ?? m._getType?.());
+        return new AIMessage("Hello!");
+      });
+      const { interviewer } = build(model);
+      const question = { ...QUESTIONS[1] };
+      await collect(interviewer.streamTurn({ sessionId: "s1", text: "(The candidate has joined.)", ...AVATAR, question, questionChanged: true }));
+      expect(seen.filter((t) => t === "system")).toHaveLength(1);
+    });
+
+    it("in text mode, present_question yields no question event and the prompt is the text one", async () => {
+      let systemPrompt;
+      const model = fakeModel()
+        .respond((messages) => {
+          systemPrompt = messages[0].content;
+          return toolCalls([{ name: "present_question", args: { index: 0 } }]);
+        })
+        .respond(new AIMessage("ok"));
+      const { interviewer } = build(model);
+      const events = await collect(interviewer.streamTurn({ sessionId: "s1", text: "hi", ...TURN, questions: QUESTIONS }));
+      expect(events.filter((e) => e.type === "question")).toEqual([]);
+      expect(systemPrompt).not.toContain("present_question");
+    });
+  });
 });

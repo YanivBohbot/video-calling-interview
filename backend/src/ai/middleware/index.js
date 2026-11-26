@@ -4,3 +4,4 @@ export { createLoggingMiddleware } from "./logging.js";
 export { withFallback } from "./fallback.js";
 export { createCallBudget, BudgetExceededError } from "./budget.js";
 export { requireToolBeforeResponse } from "./requireToolBeforeResponse.js";
+export { forceToolFirst } from "./forceToolFirst.js";

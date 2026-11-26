@@ -49,6 +49,9 @@ const NewInterview: React.FC = () => {
     duration: 60,
     interviewType: 'technical',
     notes: '',
+    company: '',
+    interviewLanguage: 'en',
+    aiInterviewerEnabled: false,
   });
   const [roleDomain, setRoleDomain] = useState<string>('backend');
   const [roleSeniority, setRoleSeniority] = useState<string>('mid');
@@ -88,6 +91,9 @@ const NewInterview: React.FC = () => {
           duration: formData.duration,
           interviewType: formData.interviewType,
           notes: formData.notes,
+          company: formData.company.trim() || undefined,
+          interviewLanguage: formData.interviewLanguage,
+          aiInterviewerEnabled: formData.aiInterviewerEnabled,
         }),
       });
 
@@ -250,7 +256,7 @@ const NewInterview: React.FC = () => {
                   setCreated(null);
                   setInviteLink(null);
                   setInviteError(null);
-                  setFormData({ candidateName: '', candidateEmail: '', date: '', time: '', duration: 60, interviewType: 'technical', notes: '' });
+                  setFormData({ candidateName: '', candidateEmail: '', date: '', time: '', duration: 60, interviewType: 'technical', notes: '', company: '', interviewLanguage: 'en', aiInterviewerEnabled: false });
                   setRoleDomain('backend');
                   setRoleSeniority('mid');
                   setCustomRole('');
@@ -386,6 +392,22 @@ const NewInterview: React.FC = () => {
             )}
           </div>
 
+          {/* Company */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <Briefcase size={16} className="text-brand" />
+              Company <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <input
+              type="text"
+              disabled={isSubmitting}
+              value={formData.company}
+              onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+              placeholder="e.g. Acme Corp"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all disabled:opacity-50"
+            />
+          </div>
+
           {/* Interview type + duration */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
@@ -420,6 +442,41 @@ const NewInterview: React.FC = () => {
                   <option key={d.value} value={d.value}>{d.label}</option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Language + AI interviewer */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <FileText size={16} className="text-brand" />
+                Interview language
+              </label>
+              <select
+                disabled={isSubmitting}
+                value={formData.interviewLanguage}
+                onChange={(e) => setFormData({ ...formData, interviewLanguage: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all disabled:opacity-50 bg-white"
+              >
+                <option value="en">English</option>
+                <option value="he">עברית</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  disabled={isSubmitting}
+                  checked={formData.aiInterviewerEnabled}
+                  onChange={(e) => setFormData({ ...formData, aiInterviewerEnabled: e.target.checked })}
+                  className="w-4 h-4 rounded border-slate-300 accent-brand disabled:opacity-50"
+                />
+                The AI interviewer may run this interview if I'm not there
+              </label>
+              <p className="text-xs text-slate-500">
+                Your candidate can then take the interview with an AI avatar when you're not in the room.
+              </p>
             </div>
           </div>
 

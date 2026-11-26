@@ -3,7 +3,7 @@ import { EDITOR_LANGUAGES } from "../integrations/piston/client.js";
 
 const language = z.enum(EDITOR_LANGUAGES, { message: `language must be one of: ${EDITOR_LANGUAGES.join(", ")}` });
 
-export const startPracticeBody = z.object({ language });
+export const startPracticeBody = z.object({ language, mode: z.enum(["text", "avatar"]).default("text") });
 
 export const practiceMessageBody = z.object({
   text: z

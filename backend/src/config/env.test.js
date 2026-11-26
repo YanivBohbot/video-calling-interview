@@ -101,4 +101,19 @@ describe("loadConfig", () => {
   it("returns a frozen object", () => {
     expect(Object.isFrozen(loadConfig(base))).toBe(true);
   });
+
+  it("reads the LiveAvatar settings, sandbox on by default", () => {
+    const config = loadConfig({ ...base, LIVEAVATAR_API_KEY: "" });
+    expect(config.liveAvatar.apiKey).toBeUndefined();
+    expect(config.liveAvatar.avatarId).toBe("dd73ea75-1218-4ef3-92ce-606d5f7fbc0a");
+    expect(config.liveAvatar.sandbox).toBe(true);
+    expect(loadConfig({ ...base, LIVEAVATAR_API_KEY: "k" }).liveAvatar.apiKey).toBe("k");
+  });
+
+  it("turns LIVEAVATAR_SANDBOX off only for false or 0", () => {
+    expect(loadConfig({ ...base, LIVEAVATAR_SANDBOX: "false" }).liveAvatar.sandbox).toBe(false);
+    expect(loadConfig({ ...base, LIVEAVATAR_SANDBOX: "0" }).liveAvatar.sandbox).toBe(false);
+    expect(loadConfig({ ...base, LIVEAVATAR_SANDBOX: "true" }).liveAvatar.sandbox).toBe(true);
+    expect(loadConfig({ ...base, LIVEAVATAR_SANDBOX: "" }).liveAvatar.sandbox).toBe(true);
+  });
 });

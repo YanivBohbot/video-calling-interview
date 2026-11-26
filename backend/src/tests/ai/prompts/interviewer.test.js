@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildInterviewerPrompt, buildQuestionSwitchNote } from "../../../ai/prompts/interviewer.js";
+import { buildInterviewerPrompt, buildQuestionSwitchNote, buildAvatarInterviewerPrompt } from "../../../ai/prompts/interviewer.js";
 
 const BASE = { role: "Backend engineer", interviewType: "technical" };
 
@@ -23,5 +23,38 @@ describe("question switch note", () => {
     const note = buildQuestionSwitchNote({ text: "Design a food rating system", category: "technical", difficulty: "medium" });
     expect(note).toMatch(/moved on to a new question/);
     expect(note).toContain("Design a food rating system");
+  });
+});
+
+describe("avatar interviewer prompt", () => {
+  const AVATAR = {
+    role: "Backend engineer",
+    company: "Acme",
+    interviewLanguage: "en",
+    questions: [
+      { text: "Tell me about a hard bug you fixed", category: "behavioral", difficulty: "easy" },
+      { text: "Reverse a linked list", category: "technical", difficulty: "medium" },
+      { text: "Design a URL shortener", category: "system-design", difficulty: "hard" },
+    ],
+  };
+
+  it("greets with the role and company, says how many questions, and walks them with present_question", () => {
+    const prompt = buildAvatarInterviewerPrompt(AVATAR);
+    expect(prompt).toContain("Acme");
+    expect(prompt).toContain("Backend engineer");
+    expect(prompt).toMatch(/\b3 questions\b/);
+    expect(prompt).toContain("present_question");
+    expect(prompt).toContain("(The candidate has joined.)");
+    expect(prompt).toContain("Reverse a linked list");
+    expect(prompt).toMatch(/end_session/);
+    expect(prompt).not.toMatch(/Hebrew/);
+  });
+
+  it("speaks Hebrew when the interview language is he", () => {
+    expect(buildAvatarInterviewerPrompt({ ...AVATAR, interviewLanguage: "he" })).toMatch(/Hebrew/);
+  });
+
+  it("text mode keeps its own prompt", () => {
+    expect(buildInterviewerPrompt({ role: "Backend engineer", interviewType: "technical" })).not.toContain("present_question");
   });
 });

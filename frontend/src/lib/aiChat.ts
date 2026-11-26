@@ -8,9 +8,14 @@ export type ChatState = { messages: AiMessage[]; open: boolean };
 // Sent for the candidate when they start a session, so the agent opens the conversation.
 export const OPENING_MESSAGE = "Hi, I'm ready to start.";
 
-// The chat as shown: without that automatic first message, which nobody typed.
+// Sent for the candidate when the avatar interview starts (the agent greets them).
+export const AVATAR_OPENING_MESSAGE = '(The candidate has joined.)';
+
+// The chat as shown: without that automatic first message (either one), which nobody typed.
 export const withoutOpening = (messages: AiMessage[]) =>
-  messages[0]?.role === 'candidate' && messages[0].text === OPENING_MESSAGE ? messages.slice(1) : messages;
+  messages[0]?.role === 'candidate' && (messages[0].text === OPENING_MESSAGE || messages[0].text === AVATAR_OPENING_MESSAGE)
+    ? messages.slice(1)
+    : messages;
 
 // Same history? A poll that brings nothing new must not re-render (or re-scroll) the chat.
 export const sameMessages = (a: AiMessage[], b: AiMessage[]) =>

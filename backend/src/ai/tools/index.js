@@ -4,3 +4,4 @@ export { createRunCodeTool } from "./runCode.js";
 export { createFindProblemTool } from "./findProblem.js";
 export { createReadCandidateCodeTool } from "./readCandidateCode.js";
 export { createEndSessionTool, END_SESSION_TOOL } from "./endSession.js";
+export { createPresentQuestionTool, PRESENT_QUESTION_TOOL } from "./presentQuestion.js";
