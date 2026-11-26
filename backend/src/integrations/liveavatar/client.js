@@ -21,7 +21,8 @@ export const createLiveAvatarClient = ({ apiKey, avatarId, sandbox, fetch = glob
           mode: "FULL",
           avatar_id: avatarId,
           is_sandbox: sandbox,
-          max_session_duration: maxSeconds,
+          // The sandbox caps sessions at 60 s itself and refuses anything above (400).
+          ...(sandbox ? {} : { max_session_duration: maxSeconds }),
           avatar_persona: { language },
         }),
         signal: AbortSignal.timeout(timeoutMs),

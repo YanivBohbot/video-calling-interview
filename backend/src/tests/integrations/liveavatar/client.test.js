@@ -22,7 +22,7 @@ describe("createLiveAvatarClient", () => {
 
   it("requests a FULL-mode session token and returns it", async () => {
     const { fetch, calls } = fakeFetch(reply(200, { code: 1000, data: { session_id: "s", session_token: "t" } }));
-    const client = createLiveAvatarClient({ apiKey: "key", avatarId: AVATAR_ID, sandbox: true, fetch });
+    const client = createLiveAvatarClient({ apiKey: "key", avatarId: AVATAR_ID, sandbox: false, fetch });
 
     const result = await client.createSessionToken({ language: "he", maxSeconds: 600 });
 
@@ -34,17 +34,20 @@ describe("createLiveAvatarClient", () => {
     expect(JSON.parse(calls[0].init.body)).toEqual({
       mode: "FULL",
       avatar_id: AVATAR_ID,
-      is_sandbox: true,
+      is_sandbox: false,
       max_session_duration: 600,
       avatar_persona: { language: "he" },
     });
   });
 
-  it("sends is_sandbox false when sandbox is off", async () => {
+  // The sandbox refuses any max_session_duration above its own 60 s cap (400).
+  it("sends no max_session_duration in sandbox", async () => {
     const { fetch, calls } = fakeFetch(reply(200, { data: { session_token: "t" } }));
-    const client = createLiveAvatarClient({ apiKey: "key", avatarId: AVATAR_ID, sandbox: false, fetch });
-    await client.createSessionToken({ language: "en", maxSeconds: 60 });
-    expect(JSON.parse(calls[0].init.body).is_sandbox).toBe(false);
+    const client = createLiveAvatarClient({ apiKey: "key", avatarId: AVATAR_ID, sandbox: true, fetch });
+    await client.createSessionToken({ language: "en", maxSeconds: 600 });
+    const body = JSON.parse(calls[0].init.body);
+    expect(body.is_sandbox).toBe(true);
+    expect(body).not.toHaveProperty("max_session_duration");
   });
 
   it("throws an UpstreamError on a non-2xx answer", async () => {
