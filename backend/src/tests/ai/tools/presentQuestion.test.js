@@ -12,7 +12,14 @@ describe("present_question tool", () => {
   it("returns the question at that index, as JSON", async () => {
     const presentTool = createPresentQuestionTool();
     expect(presentTool.name).toBe(PRESENT_QUESTION_TOOL);
-    expect(JSON.parse(await presentTool.invoke({ index: 1 }, avatar))).toEqual({ index: 1, text: "Reverse a linked list" });
+    expect(JSON.parse(await presentTool.invoke({ index: 1 }, avatar))).toMatchObject({ index: 1, text: "Reverse a linked list" });
+  });
+
+  // Forced first (forceToolFirst), the model then tended to skip the greeting.
+  it("tells the model what to say next, greeting first if it has not", async () => {
+    const { next } = JSON.parse(await createPresentQuestionTool().invoke({ index: 0 }, avatar));
+    expect(next).toMatch(/greet/i);
+    expect(next).toMatch(/aloud/i);
   });
 
   it("says so when there is no question at that index", async () => {

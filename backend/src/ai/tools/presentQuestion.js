@@ -13,7 +13,11 @@ export const createPresentQuestionTool = () =>
       if (mode !== "avatar") return "Not available in this session";
       const question = questions[index];
       if (!question) return "No question at that index";
-      return JSON.stringify({ index, text: question.text });
+      return JSON.stringify({
+        index,
+        text: question.text,
+        next: "The question is now on the candidate's screen. If you have not greeted the candidate yet, greet them first as your instructions say; then ask this question aloud.",
+      });
     },
     {
       name: PRESENT_QUESTION_TOOL,

@@ -7,7 +7,13 @@ import {
   createEndSessionTool,
   createPresentQuestionTool,
 } from "../../tools/index.js";
-import { turnLimits, isLimitMessage, withFallback, createLoggingMiddleware } from "../../middleware/index.js";
+import {
+  turnLimits,
+  isLimitMessage,
+  withFallback,
+  createLoggingMiddleware,
+  forceToolFirst,
+} from "../../middleware/index.js";
 import { buildInterviewerPrompt, buildAvatarInterviewerPrompt, buildQuestionSwitchNote } from "../../prompts/index.js";
 import { threadOf, textOf } from "./messages.js";
 import { repairUnansweredToolCalls } from "./repair.js";
@@ -66,6 +72,11 @@ export const createPracticeInterviewer = ({
     checkpointer,
     middleware: [
       dynamicSystemPromptMiddleware((_state, runtime) => promptFor(runtime.context)),
+      // Avatar mode: question 0 goes on screen by a real present_question call, never in words.
+      forceToolFirst({
+        tool: "present_question",
+        when: ({ runtime }) => runtime?.context?.mode === "avatar" && (runtime.context.questions?.length ?? 0) > 0,
+      }),
       ...turnLimits({ modelCalls: MODEL_CALLS_PER_TURN, toolCalls: TOOL_CALLS_PER_TURN }),
       ...withFallback(fallbackModel),
       createLoggingMiddleware({ agent: "practiceInterviewer", log }),
