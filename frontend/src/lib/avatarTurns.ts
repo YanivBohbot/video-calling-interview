@@ -13,7 +13,7 @@ export const createTurnQueue = () => {
       pending.push(line);
       return null;
     },
-    // A turn was sent, or the avatar started speaking.
+    // A turn was sent: held until its reply is spoken (or fails).
     replyStarted() {
       busy = true;
     },

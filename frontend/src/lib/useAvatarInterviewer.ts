@@ -200,7 +200,8 @@ export function useAvatarInterviewer({
           }
         });
         session.on(AgentEventsEnum.USER_TRANSCRIPTION, (event) => heard(event.text));
-        session.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, () => queueRef.current.replyStarted());
+        // No AVATAR_SPEAK_STARTED: runTurn already holds the queue until our reply is spoken, and
+        // a speech start we did not ask for would hold it with nothing left to release it.
         session.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
           if (avatarRef.current !== session || !speakingRef.current) return;
           speakingRef.current = false;
